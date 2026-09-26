@@ -2914,6 +2914,8 @@ export interface PipelineStepRun {
   continue_on_error?: boolean
   // no_cache: this build step rebuilt every layer instead of reusing cached ones.
   no_cache?: boolean
+  // platforms: the platforms this build step's image was built for; absent means the runner's own.
+  platforms?: string[]
   logs?: string
   started_at?: string | null
   finished_at?: string | null

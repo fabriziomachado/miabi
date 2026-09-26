@@ -92,6 +92,12 @@ func (d *Dispatcher) RunnerWaitReason(workspaceID uint) string {
 	return d.runners.AvailabilityReason(runner.Job{WorkspaceID: workspaceID})
 }
 
+// WaitReason explains why no runner can take the pipeline run right now, counting what its steps need, such
+// as a runner that builds for several platforms. "" means one is actually available.
+func (d *Dispatcher) WaitReason(in JobInputs) string {
+	return d.runners.AvailabilityReason(runner.Job{WorkspaceID: in.Run.WorkspaceID, RequiredFeatures: requiredFeatures(in.Steps)})
+}
+
 // SweepExpiredLeases releases every active lease whose deadline has passed and returns them. A
 // runner that died mid-job never runs the lease's release defer, so without this the lease counts
 // against its concurrency forever and starves it. The affected runs re-attempt on their own.
@@ -117,7 +123,9 @@ type dispatchMeta struct {
 // the way out. ErrNoRunner and ErrRunnerOffline are returned unchanged so the caller can requeue.
 func (d *Dispatcher) Dispatch(ctx context.Context, in JobInputs, requiredLabels []string, subjectUserID uint) error {
 	run := in.Run
-	rn, err := d.runners.SelectRunner(runner.Job{WorkspaceID: run.WorkspaceID, RequiredLabels: requiredLabels})
+	rn, err := d.runners.SelectRunner(runner.Job{
+		WorkspaceID: run.WorkspaceID, RequiredLabels: requiredLabels, RequiredFeatures: requiredFeatures(in.Steps),
+	})
 	if err != nil {
 		return err // ErrNoRunner → caller queues
 	}

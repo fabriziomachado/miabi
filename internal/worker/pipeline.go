@@ -94,6 +94,8 @@ type RunnerDispatcher interface {
 	// Dispatch runs the pipeline on a runner and drives it to a terminal status,
 	// or returns runners.ErrNoRunner / ErrRunnerOffline when none can take it now.
 	Dispatch(ctx context.Context, in runners.JobInputs, requiredLabels []string, subjectUserID uint) error
+	// WaitReason explains why no runner can take the run now, or "".
+	WaitReason(in runners.JobInputs) string
 }
 
 // SetRunnerDispatch wires runner dispatch: every pipeline build runs on a
@@ -200,7 +202,7 @@ func (h *PipelineHandler) runOnRunner(ctx context.Context, run *models.PipelineR
 		h.markCacheBuilt(run, in)
 		return nil // Dispatch drove the run to a terminal status
 	case errors.Is(err, runnersvc.ErrNoRunner), errors.Is(err, runners.ErrRunnerOffline):
-		return h.waitForRunner(run) // none available right now — wait (bounded)
+		return h.waitForRunner(run, h.dispatcher.WaitReason(in)) // none available right now — wait (bounded)
 	default:
 		return h.failRun(run, err)
 	}
@@ -221,15 +223,21 @@ const runnerWaitInterval = 15 * time.Second
 // waitForRunner parks a run back in pending and re-enqueues it shortly, so it never builds on a node
 // while it waits. If no runner has become available within runnerWaitTimeout, measured from when the
 // run was created, the run fails rather than waiting forever — pointing the user at Runners.
-func (h *PipelineHandler) waitForRunner(run *models.PipelineRun) error {
+func (h *PipelineHandler) waitForRunner(run *models.PipelineRun, reason string) error {
 	if h.runnerWaitTimeout > 0 && time.Since(run.CreatedAt) > h.runnerWaitTimeout {
-		return h.failRun(run, fmt.Errorf(
-			"no runner became available within %s — register a runner (Settings → Runners)", h.runnerWaitTimeout))
+		if reason == "" {
+			reason = "register a runner (Settings → Runners)"
+		}
+		return h.failRun(run, fmt.Errorf("no runner became available within %s — %s", h.runnerWaitTimeout, reason))
 	}
 	run.Status = models.PipelineRunPending
 	run.StartedAt = nil
 	_ = h.pipelines.UpdateRun(run)
-	h.log(run.ID, "waiting for an available runner…")
+	if reason != "" {
+		h.log(run.ID, "waiting for an available runner: "+reason)
+	} else {
+		h.log(run.ID, "waiting for an available runner…")
+	}
 	h.publishStatus(run.ID, models.PipelineRunPending)
 	return h.producer.EnqueuePipelineRunIn(run.ID, runnerWaitInterval)
 }

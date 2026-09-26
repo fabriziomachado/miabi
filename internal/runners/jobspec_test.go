@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/miabi-io/miabi/internal/models"
+	"github.com/miabi-io/runner/proto"
 )
 
 func envMap(env []string) map[string]string {
@@ -306,5 +307,24 @@ func TestBuildJobSpecCarriesCacheRefs(t *testing.T) {
 	spec, _ = BuildJobSpec(in)
 	if !spec.Steps[0].Build.NoCache {
 		t.Error("a bumped generation must force the next build cold")
+	}
+}
+
+// Platforms alone are reason enough to send a build config, and a run that names them needs a runner that
+// reports it can build for several platforms.
+func TestBuildPlatforms(t *testing.T) {
+	step := models.PipelineStepRun{Uses: "build", Platforms: []string{"linux/amd64", "linux/arm64"}}
+	cfg := buildConfig(&step, JobInputs{})
+	if cfg == nil || strings.Join(cfg.Platforms, ",") != "linux/amd64,linux/arm64" {
+		t.Fatalf("build config = %+v, want the platforms carried", cfg)
+	}
+	if cfg.Method != "dockerfile" {
+		t.Errorf("method = %q: a config sent for platforms alone must not switch to auto-detection", cfg.Method)
+	}
+	if got := requiredFeatures([]models.PipelineStepRun{{Uses: "test"}, step}); len(got) != 1 || got[0] != proto.FeatureMultiPlatform {
+		t.Errorf("required features = %v", got)
+	}
+	if got := requiredFeatures([]models.PipelineStepRun{{Uses: "build"}}); got != nil {
+		t.Errorf("a single-platform build requires %v", got)
 	}
 }

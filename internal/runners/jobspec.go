@@ -126,13 +126,13 @@ func buildConfig(s *models.PipelineStepRun, in JobInputs) *proto.BuildConfig {
 	noCache := s.NoCache || in.CacheCold
 	cacheFrom, cacheTo := CacheRefs(in.Repository, in.Branch, in.CacheTrunk, in.CacheGeneration)
 	df := strings.TrimSpace(s.Dockerfile)
-	if df == "" && !noCache && cacheTo == "" {
+	if df == "" && !noCache && cacheTo == "" && len(s.Platforms) == 0 {
 		return nil
 	}
-	cfg := &proto.BuildConfig{Dockerfile: df, NoCache: noCache, CacheFrom: cacheFrom, CacheTo: cacheTo}
+	cfg := &proto.BuildConfig{Dockerfile: df, NoCache: noCache, CacheFrom: cacheFrom, CacheTo: cacheTo, Platforms: s.Platforms}
 	if df == "" {
-		// nil already meant "Dockerfile at the source root"; a config sent for the cache alone must not
-		// flip that to auto-detection and turn a broken build into a silent buildpack one.
+		// nil already meant "Dockerfile at the source root"; a config sent for the cache or platforms alone
+		// must not flip that to auto-detection and turn a broken build into a silent buildpack one.
 		cfg.Method = "dockerfile"
 	}
 	return cfg
@@ -176,3 +176,13 @@ func appendKV(env []string, k, v string) []string {
 }
 
 func utos(u uint) string { return strconv.FormatUint(uint64(u), 10) }
+
+// requiredFeatures are the runner features the run's steps depend on.
+func requiredFeatures(steps []models.PipelineStepRun) []string {
+	for i := range steps {
+		if steps[i].Uses == "build" && len(steps[i].Platforms) > 0 {
+			return []string{proto.FeatureMultiPlatform}
+		}
+	}
+	return nil
+}

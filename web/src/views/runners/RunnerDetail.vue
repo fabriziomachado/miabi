@@ -144,6 +144,7 @@ async function remove() {
             <div><dt>{{ $t('dashboard.col.created') }}</dt><dd>{{ fmtDateTime(runner.created_at) }}</dd></div>
             <div><dt>{{ $t('runners.platform') }}</dt><dd>{{ platform }}</dd></div>
             <div><dt>{{ $t('runners.version') }}</dt><dd>{{ runner.version || '—' }}</dd></div>
+            <div><dt>{{ $t('runners.features') }}</dt><dd>{{ runner.features?.length ? runner.features.join(', ') : '—' }}</dd></div>
             <div><dt>{{ $t('runners.concurrency') }}</dt><dd>{{ runner.concurrency }} job(s)</dd></div>
             <div><dt>{{ $t('jobs.enabled') }}</dt><dd>{{ runner.enabled ? 'Yes' : 'No' }}</dd></div>
             <div class="detail-wide">

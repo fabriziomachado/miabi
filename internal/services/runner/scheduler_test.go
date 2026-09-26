@@ -49,27 +49,27 @@ func TestEligible(t *testing.T) {
 			Enabled: true, Cordoned: false, Labels: []string{"arch=amd64", "buildkit"},
 		}
 	}
-	if !eligible(base(), 1, []string{"buildkit"}, true) {
+	if !eligible(base(), Job{WorkspaceID: 1, RequiredLabels: []string{"buildkit"}}, true) {
 		t.Error("a connected, enabled, in-scope, label-matching runner should be eligible")
 	}
 	// Each disqualifier independently makes it ineligible.
 	r := base()
 	r.Enabled = false
-	if eligible(r, 1, nil, true) {
+	if eligible(r, Job{WorkspaceID: 1, RequiredLabels: nil}, true) {
 		t.Error("disabled runner must be ineligible")
 	}
 	r = base()
 	r.Cordoned = true
-	if eligible(r, 1, nil, true) {
+	if eligible(r, Job{WorkspaceID: 1, RequiredLabels: nil}, true) {
 		t.Error("cordoned runner must be ineligible")
 	}
-	if eligible(base(), 1, nil, false) {
+	if eligible(base(), Job{WorkspaceID: 1, RequiredLabels: nil}, false) {
 		t.Error("disconnected runner must be ineligible")
 	}
-	if eligible(base(), 2, nil, true) {
+	if eligible(base(), Job{WorkspaceID: 2, RequiredLabels: nil}, true) {
 		t.Error("out-of-scope runner must be ineligible")
 	}
-	if eligible(base(), 1, []string{"gpu"}, true) {
+	if eligible(base(), Job{WorkspaceID: 1, RequiredLabels: []string{"gpu"}}, true) {
 		t.Error("runner missing a required label must be ineligible")
 	}
 }
@@ -84,24 +84,24 @@ func TestSelectionPrefersLeastLoadedWithCapacity(t *testing.T) {
 
 	// #2 has the fewest active leases → chosen. #3 is also at 0, so the lower id breaks the tie.
 	loads := map[uint]int{1: 1, 2: 0, 3: 0}
-	if got := pick(runners, 1, []string{"buildkit"}, loads, always); got == nil || got.ID != 2 {
+	if got := pick(runners, Job{WorkspaceID: 1, RequiredLabels: []string{"buildkit"}}, loads, always); got == nil || got.ID != 2 {
 		t.Fatalf("least-loaded selection = %v, want runner 2", got)
 	}
 
 	// Saturate #1 and #2; only #3 has spare capacity (0 < 1).
 	full := map[uint]int{1: 2, 2: 2, 3: 0}
-	if got := pick(runners, 1, []string{"buildkit"}, full, always); got == nil || got.ID != 3 {
+	if got := pick(runners, Job{WorkspaceID: 1, RequiredLabels: []string{"buildkit"}}, full, always); got == nil || got.ID != 3 {
 		t.Fatalf("with 1&2 saturated, selection = %v, want runner 3", got)
 	}
 
 	// Everyone saturated → no runner (caller queues, "waiting for a runner").
 	saturated := map[uint]int{1: 2, 2: 2, 3: 1}
-	if got := pick(runners, 1, []string{"buildkit"}, saturated, always); got != nil {
+	if got := pick(runners, Job{WorkspaceID: 1, RequiredLabels: []string{"buildkit"}}, saturated, always); got != nil {
 		t.Fatalf("all saturated: selection = %v, want none", got)
 	}
 
 	// A required label no runner has → no match.
-	if got := pick(runners, 1, []string{"gpu"}, loads, always); got != nil {
+	if got := pick(runners, Job{WorkspaceID: 1, RequiredLabels: []string{"gpu"}}, loads, always); got != nil {
 		t.Fatalf("unmatched label: selection = %v, want none", got)
 	}
 }
@@ -115,28 +115,28 @@ func TestSelectionPrefersTheWorkspacesOwnRunner(t *testing.T) {
 	candidates := []models.Runner{shared, own}
 	always := func(uint) bool { return true }
 
-	if got := pick(candidates, 1, nil, map[uint]int{}, always); got == nil || got.ID != 9 {
+	if got := pick(candidates, Job{WorkspaceID: 1}, map[uint]int{}, always); got == nil || got.ID != 9 {
 		t.Fatalf("both idle: selection = %v, want the workspace's own runner 9", got)
 	}
 
 	// Busier, but still theirs: a build on a warm cache beats relocating to the shared pool.
-	if got := pick(candidates, 1, nil, map[uint]int{1: 0, 9: 1}, always); got == nil || got.ID != 9 {
+	if got := pick(candidates, Job{WorkspaceID: 1}, map[uint]int{1: 0, 9: 1}, always); got == nil || got.ID != 9 {
 		t.Fatalf("own runner busier: selection = %v, want 9 (own beats shared ahead of load)", got)
 	}
 
 	// Saturated, not merely busy → the shared pool takes it rather than the job waiting forever.
-	if got := pick(candidates, 1, nil, map[uint]int{1: 0, 9: 2}, always); got == nil || got.ID != 1 {
+	if got := pick(candidates, Job{WorkspaceID: 1}, map[uint]int{1: 0, 9: 2}, always); got == nil || got.ID != 1 {
 		t.Fatalf("own runner saturated: selection = %v, want the shared runner 1", got)
 	}
 
 	// Offline own runner → the shared pool, so a dead runner does not block every build.
 	onlyShared := func(id uint) bool { return id == 1 }
-	if got := pick(candidates, 1, nil, map[uint]int{}, onlyShared); got == nil || got.ID != 1 {
+	if got := pick(candidates, Job{WorkspaceID: 1}, map[uint]int{}, onlyShared); got == nil || got.ID != 1 {
 		t.Fatalf("own runner offline: selection = %v, want the shared runner 1", got)
 	}
 
 	// With no runner of their own, the shared pool is still used.
-	if got := pick([]models.Runner{shared}, 1, nil, map[uint]int{}, always); got == nil || got.ID != 1 {
+	if got := pick([]models.Runner{shared}, Job{WorkspaceID: 1}, map[uint]int{}, always); got == nil || got.ID != 1 {
 		t.Fatalf("no own runner: selection = %v, want the shared runner 1", got)
 	}
 }
@@ -148,7 +148,26 @@ func TestSelectionRanksWithinTheOwnedTierByLoad(t *testing.T) {
 		{ID: 5, WorkspaceID: ptr(1), Scope: models.ScopeWorkspace, Enabled: true, Concurrency: 3},
 	}
 	always := func(uint) bool { return true }
-	if got := pick(candidates, 1, nil, map[uint]int{4: 2, 5: 1}, always); got == nil || got.ID != 5 {
+	if got := pick(candidates, Job{WorkspaceID: 1}, map[uint]int{4: 2, 5: 1}, always); got == nil || got.ID != 5 {
 		t.Fatalf("selection = %v, want the least-loaded owned runner 5", got)
+	}
+}
+
+// A job needing a feature goes only to a runner that reports it: an older runner accepts the job and drops
+// what it does not understand, building a single-platform image as if nothing had been asked.
+func TestFeaturesGateEligibility(t *testing.T) {
+	always := func(uint) bool { return true }
+	old := models.Runner{ID: 1, Name: "old", Enabled: true, Concurrency: 2, Scope: models.ScopeShared}
+	current := models.Runner{ID: 2, Name: "current", Enabled: true, Concurrency: 2, Scope: models.ScopeShared, Features: []string{"multi-platform"}}
+	job := Job{WorkspaceID: 1, RequiredFeatures: []string{"multi-platform"}}
+
+	if got := pick([]models.Runner{old, current}, job, map[uint]int{2: 1}, always); got == nil || got.ID != 2 {
+		t.Errorf("picked %+v, want the runner that reports the feature, even though it is busier", got)
+	}
+	if got := pick([]models.Runner{old}, job, map[uint]int{}, always); got != nil {
+		t.Errorf("picked %s, which does not report multi-platform", got.Name)
+	}
+	if got := pick([]models.Runner{old}, Job{WorkspaceID: 1}, map[uint]int{}, always); got == nil {
+		t.Error("a job needing no feature must still run on an older runner")
 	}
 }

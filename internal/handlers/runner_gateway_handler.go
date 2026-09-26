@@ -4,10 +4,14 @@
 package handlers
 
 import (
+	"strings"
+
 	"github.com/gorilla/websocket"
 	"github.com/jkaninda/okapi"
+	"github.com/miabi-io/miabi/internal/models"
 	"github.com/miabi-io/miabi/internal/runners"
 	"github.com/miabi-io/miabi/internal/services/runner"
+	"github.com/miabi-io/runner/proto"
 )
 
 // RunnerGatewayHandler is the runner tunnel endpoint: a runner dials in over an outbound
@@ -56,6 +60,20 @@ func (h *RunnerGatewayHandler) Connect(c *okapi.Context) error {
 	if err != nil {
 		return nil // upgrade failed; response already handled
 	}
-	h.manager.Handle(r, c.Header("X-Runner-OS"), c.Header("X-Runner-Arch"), c.Header("X-Runner-Version"), c.RealIP(), ws)
+	h.manager.Handle(r, models.RunnerFacts{
+		OS: c.Header("X-Runner-OS"), Arch: c.Header("X-Runner-Arch"), Version: c.Header("X-Runner-Version"),
+		RemoteIP: c.RealIP(), Features: runnerFeatures(c.Header(proto.HeaderFeatures)),
+	}, ws)
 	return nil
+}
+
+// runnerFeatures splits the comma-separated features a runner advertises.
+func runnerFeatures(header string) []string {
+	var out []string
+	for _, f := range strings.Split(header, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
 }

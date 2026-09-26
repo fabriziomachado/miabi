@@ -2694,7 +2694,8 @@
     "webhookLead": "Ajoutez ce webhook à votre fournisseur Git et un push lance une exécution de {pipeline}, épinglée au commit poussé.",
     "webhookLeadBranch": "Ajoutez ce webhook à votre fournisseur Git et un push vers {branch} lance une exécution de {pipeline}, épinglée au commit poussé.",
     "webhookLoadFailed": "Les détails du webhook n’ont pas pu être chargés.",
-    "workspaceSecret": "secret d’espace de travail"
+    "workspaceSecret": "secret d’espace de travail",
+    "builtForPlatforms": "Plateformes pour lesquelles cette image a été construite, publiées comme une seule image multiplateforme"
   },
   "placement": {
     "anyNodeTheSchedulerDecides": "N’importe quel nœud — l’ordonnanceur décide",
@@ -3224,7 +3225,8 @@
     },
     "token": "Jeton",
     "tokenHint": "C’est la seule fois où il est affiché. Exécutez le runner sur votre machine de build :",
-    "version": "Version"
+    "version": "Version",
+    "features": "Fonctionnalités"
   },
   "saveAsSecret": {
     "optional": "(facultatif)",

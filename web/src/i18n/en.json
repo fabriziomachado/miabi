@@ -2694,7 +2694,8 @@
     "webhookLead": "Add this webhook to your Git provider and a push starts a run of {pipeline}, pinned to the pushed commit.",
     "webhookLeadBranch": "Add this webhook to your Git provider and a push to {branch} starts a run of {pipeline}, pinned to the pushed commit.",
     "webhookLoadFailed": "The webhook details could not be loaded.",
-    "workspaceSecret": "workspace secret"
+    "workspaceSecret": "workspace secret",
+    "builtForPlatforms": "Platforms this image was built for, pushed as one multi-platform image"
   },
   "placement": {
     "anyNodeTheSchedulerDecides": "Any node — the scheduler decides",
@@ -3224,7 +3225,8 @@
     },
     "token": "Token",
     "tokenHint": "This is the only time it is shown. Run the runner on your build machine:",
-    "version": "Version"
+    "version": "Version",
+    "features": "Features"
   },
   "saveAsSecret": {
     "optional": "(optional)",

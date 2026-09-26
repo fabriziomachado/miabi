@@ -203,6 +203,8 @@ type PipelineStepRun struct {
 	// `cache: false` OR the run-level override — so the runner reads one field and the row records what
 	// was actually asked of the builder.
 	NoCache bool `json:"no_cache,omitempty" gorm:"not null;default:false"`
+	// Platforms are the platforms this step's image was built for; empty means the runner's own.
+	Platforms []string `json:"platforms,omitempty" gorm:"serializer:json"`
 	// Env is the step's environment as written in the spec, references included:
 	// the run records what was asked for, never a resolved secret value.
 	Env map[string]string `json:"env,omitempty" gorm:"serializer:json"`

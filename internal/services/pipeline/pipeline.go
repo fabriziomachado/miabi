@@ -399,6 +399,7 @@ func (s *Service) Trigger(workspaceID, pipelineID uint, in TriggerInput) (*model
 			Status: models.PipelineRunPending, Image: st.Image, Uses: st.Uses, Run: st.Run,
 			Dockerfile: st.Dockerfile, BuildContext: st.Context, BuildArgs: st.BuildArgs,
 			NoCache:         st.NoCache() || in.NoCache,
+			Platforms:       st.Platforms,
 			Env:             st.Env,
 			ContinueOnError: st.ContinueOnError,
 		}

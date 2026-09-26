@@ -25,7 +25,7 @@ const heartbeatInterval = 30 * time.Second
 // Implemented by runner.Service (MarkConnected/MarkDisconnected); an interface
 // keeps this package free of a service import cycle.
 type connectionState interface {
-	MarkConnected(id uint, os, arch, version, remoteIP string)
+	MarkConnected(id uint, f models.RunnerFacts)
 	MarkDisconnected(id uint)
 }
 
@@ -47,7 +47,7 @@ func NewManager(state connectionState) *Manager {
 // Handle owns an authenticated runner WebSocket: it builds the tunnel, marks the runner online,
 // and blocks until the tunnel closes so the HTTP handler keeps the connection open. The caller has
 // already validated the registration token.
-func (m *Manager) Handle(r *models.Runner, os, arch, version, remoteIP string, ws *websocket.Conn) {
+func (m *Manager) Handle(r *models.Runner, f models.RunnerFacts, ws *websocket.Conn) {
 	id := r.ID
 	// Control plane OPENS streams to the runner (to dispatch job leases), so the
 	// runner side ACCEPTS them — mirrors the node/agent role split.
@@ -59,11 +59,11 @@ func (m *Manager) Handle(r *models.Runner, os, arch, version, remoteIP string, w
 	}
 
 	m.replace(id, sess)
-	m.state.MarkConnected(id, os, arch, version, remoteIP)
-	logger.Info("runner connected", "runner", id, "name", r.Name, "version", version, "ip", remoteIP)
+	m.state.MarkConnected(id, f)
+	logger.Info("runner connected", "runner", id, "name", r.Name, "version", f.Version, "ip", f.RemoteIP)
 
 	stop := make(chan struct{})
-	go m.heartbeat(id, os, arch, version, remoteIP, stop)
+	go m.heartbeat(id, f, stop)
 
 	<-sess.CloseChan() // blocks until the tunnel dies (keepalive timeout or close)
 	close(stop)
@@ -100,7 +100,7 @@ func (m *Manager) Disconnect(id uint) {
 	}
 }
 
-func (m *Manager) heartbeat(id uint, os, arch, version, remoteIP string, stop <-chan struct{}) {
+func (m *Manager) heartbeat(id uint, f models.RunnerFacts, stop <-chan struct{}) {
 	t := time.NewTicker(heartbeatInterval)
 	defer t.Stop()
 	for {
@@ -108,7 +108,7 @@ func (m *Manager) heartbeat(id uint, os, arch, version, remoteIP string, stop <-
 		case <-stop:
 			return
 		case <-t.C:
-			m.state.MarkConnected(id, os, arch, version, remoteIP)
+			m.state.MarkConnected(id, f)
 		}
 	}
 }
