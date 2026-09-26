@@ -10,10 +10,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/miabi-io/miabi/internal/services/placement"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/miabi-io/miabi/internal/services/placement"
 
 	"github.com/miabi-io/miabi/internal/docker"
 	"github.com/miabi-io/miabi/internal/models"
@@ -160,7 +161,7 @@ func (s *Service) Discover(ctx context.Context, serverID uint) (*Importable, err
 		return nil, fmt.Errorf("list networks: %w", err)
 	}
 
-	out := &Importable{}
+	out := &Importable{Containers: []ImportableContainer{}, Volumes: []ImportableVolume{}, Networks: []ImportableNetwork{}}
 	// volume name -> unmanaged containers using it; same for networks.
 	volUsedBy := map[string][]string{}
 	netUsedBy := map[string][]string{}

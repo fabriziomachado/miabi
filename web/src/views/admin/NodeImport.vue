@@ -43,7 +43,8 @@ async function load() {
   groupStack.value = {}
   try {
     const [imp, ws] = await Promise.all([nodesApi.importable(id), adminApi.listWorkspaces()])
-    resources.value = imp.data.data ?? { containers: [], volumes: [], networks: [] }
+    const found = imp.data.data
+    resources.value = { containers: found?.containers ?? [], volumes: found?.volumes ?? [], networks: found?.networks ?? [] }
     workspaces.value = ws.data.data ?? []
     if (!workspaceId.value && workspaces.value.length) workspaceId.value = workspaces.value[0].id
     for (const c of resources.value.containers) {
