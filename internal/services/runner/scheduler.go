@@ -5,6 +5,7 @@ package runner
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/miabi-io/miabi/internal/models"
@@ -31,10 +32,12 @@ func (s *Service) SetScheduling(conn ConnRegistry, leases *repositories.RunnerLe
 }
 
 // Job describes what a build/pipeline run needs from a runner: the tenant it
-// belongs to and any required labels (arch/gpu/buildkit/…).
+// belongs to, any required labels (arch/gpu/buildkit/…), and any features the
+// runner must report supporting (multi-platform).
 type Job struct {
-	WorkspaceID    uint
-	RequiredLabels []string
+	WorkspaceID      uint
+	RequiredLabels   []string
+	RequiredFeatures []string
 }
 
 // SelectRunner picks the best eligible runner for job, or ErrNoRunner when none can take it right
@@ -49,7 +52,7 @@ func (s *Service) SelectRunner(job Job) (*models.Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	best := pick(candidates, job.WorkspaceID, job.RequiredLabels, loads, s.connected)
+	best := pick(candidates, job, loads, s.connected)
 	if best == nil {
 		return nil, ErrNoRunner
 	}
@@ -58,12 +61,12 @@ func (s *Service) SelectRunner(job Job) (*models.Runner, error) {
 
 // pick is the selection policy: the eligible runner with spare capacity that outranks every other.
 // Pure, so the policy is covered without a database or a live tunnel.
-func pick(candidates []models.Runner, workspaceID uint, required []string, loads map[uint]int, connected func(uint) bool) *models.Runner {
+func pick(candidates []models.Runner, job Job, loads map[uint]int, connected func(uint) bool) *models.Runner {
 	var best *models.Runner
 	bestLoad := 0
 	for i := range candidates {
 		r := &candidates[i]
-		if !eligible(r, workspaceID, required, connected(r.ID)) {
+		if !eligible(r, job, connected(r.ID)) {
 			continue
 		}
 		load := loads[r.ID]
@@ -121,7 +124,7 @@ func (s *Service) AvailabilityReason(job Job) string {
 		return "no runner is registered for this workspace — add one in Settings → Runners"
 	}
 	loads, _ := s.activeCounts()
-	var enabled, connected, withCapacity, labelMatch int
+	var enabled, connected, withCapacity, labelMatch, featureMatch int
 	for i := range candidates {
 		r := &candidates[i]
 		if !r.Enabled || r.Cordoned {
@@ -136,6 +139,10 @@ func (s *Service) AvailabilityReason(job Job) string {
 			continue
 		}
 		labelMatch++
+		if !labelsSatisfy(r.Features, job.RequiredFeatures) {
+			continue
+		}
+		featureMatch++
 		if loads[r.ID] < r.Concurrency {
 			withCapacity++
 		}
@@ -147,6 +154,8 @@ func (s *Service) AvailabilityReason(job Job) string {
 		return "the registered runner(s) are offline (not connected) — check the runner is running and reachable"
 	case labelMatch == 0:
 		return "no connected runner matches the job's required labels"
+	case featureMatch == 0:
+		return "no connected runner supports " + strings.Join(job.RequiredFeatures, ", ") + " — upgrade the runners to a release that does"
 	case withCapacity == 0:
 		return "all runners are busy (at their concurrency limit); the build will start when one frees up"
 	}
@@ -202,14 +211,14 @@ func (s *Service) connected(id uint) bool {
 
 // eligible is the pure matcher: it decides whether a runner may take a job,
 // independent of load. Exported behavior is covered by the scheduler tests.
-func eligible(r *models.Runner, workspaceID uint, required []string, connected bool) bool {
+func eligible(r *models.Runner, job Job, connected bool) bool {
 	if !r.Enabled || r.Cordoned || !connected {
 		return false
 	}
-	if !inScope(r, workspaceID) {
+	if !inScope(r, job.WorkspaceID) {
 		return false
 	}
-	return labelsSatisfy(r.Labels, required)
+	return labelsSatisfy(r.Labels, job.RequiredLabels) && labelsSatisfy(r.Features, job.RequiredFeatures)
 }
 
 // inScope reports whether a runner may serve the workspace: an owned runner must

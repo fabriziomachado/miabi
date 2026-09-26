@@ -15,6 +15,8 @@ export interface Runner {
   os?: string
   arch?: string
   version?: string
+  // features the runner reports supporting, such as "multi-platform"
+  features?: string[]
   remote_ip?: string
   status: 'online' | 'offline' | 'draining'
   cordoned: boolean

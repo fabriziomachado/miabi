@@ -9,8 +9,10 @@ package pipeline
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -77,6 +79,9 @@ type Step struct {
 	// credentials.
 	BuildArgs map[string]string `yaml:"build-args,omitempty"`
 	Cache     *bool             `yaml:"cache,omitempty"`
+	// Platforms are the OS/architecture pairs a `uses: build` step builds for, e.g. linux/amd64 and
+	// linux/arm64; they push as one image, and each node pulls its own. Empty builds for the runner's platform.
+	Platforms []string `yaml:"platforms,omitempty"`
 	// App overrides the deploy target for a `uses: deploy` step.
 	App string            `yaml:"app,omitempty"`
 	Env map[string]string `yaml:"env,omitempty"`
@@ -158,6 +163,14 @@ func ParseSpec(data []byte) (*Spec, error) {
 		if st.Cache != nil && st.Uses != UsesBuild {
 			return nil, fmt.Errorf("step %q: 'cache' is only valid on a 'uses: build' step", st.Name)
 		}
+		if len(st.Platforms) > 0 && st.Uses != UsesBuild {
+			return nil, fmt.Errorf("step %q: 'platforms' is only valid on a 'uses: build' step", st.Name)
+		}
+		platforms, err := normalizePlatforms(st.Platforms)
+		if err != nil {
+			return nil, fmt.Errorf("step %q: %w", st.Name, err)
+		}
+		s.Steps[i].Platforms = platforms
 		for k := range st.BuildArgs {
 			if !validArgName(k) {
 				return nil, fmt.Errorf("step %q: build-arg name %q is not a valid Dockerfile ARG (letters, digits and underscore; not starting with a digit)", st.Name, k)
@@ -183,6 +196,33 @@ func ParseSpec(data []byte) (*Spec, error) {
 }
 
 func (s Step) NoCache() bool { return s.Cache != nil && !*s.Cache }
+
+// buildPlatforms are the platforms a build may name: those BuildKit builds Linux images for.
+var buildPlatforms = map[string]bool{
+	"linux/amd64": true, "linux/arm64": true, "linux/arm/v7": true, "linux/arm/v6": true,
+	"linux/386": true, "linux/ppc64le": true, "linux/s390x": true, "linux/riscv64": true,
+}
+
+// normalizePlatforms validates a build step's platforms and drops duplicates, keeping their order. A typo
+// is refused here rather than failing the build minutes in, on a runner, with the builder's own wording.
+func normalizePlatforms(in []string) ([]string, error) {
+	var out []string
+	seen := map[string]bool{}
+	for _, p := range in {
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "linux/arm64/v8" {
+			p = "linux/arm64"
+		}
+		if !buildPlatforms[p] {
+			return nil, fmt.Errorf("unsupported platform %q; use one of %s", p, strings.Join(slices.Sorted(maps.Keys(buildPlatforms)), ", "))
+		}
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
 
 // validArgName reports whether k is usable as a Dockerfile ARG name. Docker accepts a good deal more and then
 // does nothing useful with it — a name carrying "=" or a space silently produces an arg the Dockerfile can

@@ -327,3 +327,28 @@ steps:
 		t.Fatalf("want cache-on-container-step rejection, got %v", err)
 	}
 }
+
+func platformsPipeline(step string) string {
+	return "apiVersion: miabi.io/v1\nkind: Pipeline\nmetadata: { name: web }\non: { manual: true }\nsteps:\n" + step
+}
+
+func TestParseSpecPlatforms(t *testing.T) {
+	s, err := ParseSpec([]byte(platformsPipeline(
+		"  - name: build\n    uses: build\n    platforms: [linux/amd64, LINUX/ARM64, linux/arm64/v8]\n")))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := strings.Join(s.Steps[0].Platforms, ","); got != "linux/amd64,linux/arm64" {
+		t.Errorf("platforms = %q, want them normalized and deduplicated in order", got)
+	}
+
+	for name, step := range map[string]string{
+		"unknown platform":   "  - name: build\n    uses: build\n    platforms: [linux/amd65]\n",
+		"not a build step":   "  - name: test\n    image: node:20\n    platforms: [linux/arm64]\n",
+		"windows is not one": "  - name: build\n    uses: build\n    platforms: [windows/amd64]\n",
+	} {
+		if _, err := ParseSpec([]byte(platformsPipeline(step))); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

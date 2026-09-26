@@ -3,7 +3,11 @@
 
 package runners
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/miabi-io/miabi/internal/models"
+)
 
 // fakeState records MarkConnected/MarkDisconnected calls so the manager's
 // status wiring can be asserted without a database.
@@ -16,8 +20,8 @@ func newFakeState() *fakeState {
 	return &fakeState{connected: map[uint]string{}, disconnects: map[uint]int{}}
 }
 
-func (f *fakeState) MarkConnected(id uint, _, _, version, _ string) { f.connected[id] = version }
-func (f *fakeState) MarkDisconnected(id uint)                       { f.disconnects[id]++ }
+func (f *fakeState) MarkConnected(id uint, facts models.RunnerFacts) { f.connected[id] = facts.Version }
+func (f *fakeState) MarkDisconnected(id uint)                        { f.disconnects[id]++ }
 
 // A freshly-built manager reports every runner offline and hands back no session.
 func TestManagerOfflineByDefault(t *testing.T) {

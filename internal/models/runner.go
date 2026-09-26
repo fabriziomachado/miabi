@@ -67,6 +67,9 @@ type Runner struct {
 	OS      string `json:"os,omitempty"`
 	Arch    string `json:"arch,omitempty"`
 	Version string `json:"version,omitempty"`
+	// Features are what the runner reports it can do, such as "multi-platform"; a job that needs one is
+	// scheduled only where it is listed, since an older runner would drop the request without a word.
+	Features []string `json:"features,omitempty" gorm:"serializer:json"`
 	// RemoteIP is the source address of the runner's most recent tunnel
 	// connection (last known; persists across disconnects for the detail view).
 	RemoteIP string `json:"remote_ip,omitempty"`
@@ -147,4 +150,10 @@ type RunnerLease struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// RunnerFacts are what a runner reports about itself when its tunnel connects.
+type RunnerFacts struct {
+	OS, Arch, Version, RemoteIP string
+	Features                    []string
 }

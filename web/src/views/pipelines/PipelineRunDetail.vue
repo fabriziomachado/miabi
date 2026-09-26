@@ -299,6 +299,7 @@ onBeforeUnmount(() => { es?.close(); if (ticker) clearInterval(ticker) })
                   <span v-if="s.uses" class="badge badge-neutral step-uses">{{ s.uses }}</span>
                   <span v-if="s.continue_on_error" class="badge step-allow" :title="$t('pipelines.continueOnErrorHint')">{{ $t('pipelines.continueOnError') }}</span>
                   <span v-if="s.no_cache" class="badge badge-neutral step-uses" :title="$t('pipelines.builtWithoutCache')">{{ $t('pipelines.noCache') }}</span>
+                  <span v-if="s.platforms?.length" class="badge badge-neutral step-uses" :title="$t('pipelines.builtForPlatforms')">{{ s.platforms.join(' · ') }}</span>
                 </span>
                 <span class="step-sub">
                   <span>{{ statusMeta(s.status).label }}</span>

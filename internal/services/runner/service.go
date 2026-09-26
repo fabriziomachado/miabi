@@ -366,14 +366,14 @@ func connectionBroke(m *models.Runner, now time.Time) bool {
 // MarkConnected records that a runner's tunnel is live: online status, a fresh last-seen, and its
 // self-reported platform facts. Best-effort — a missing runner is ignored — so the connection manager can
 // call it on connect and on each heartbeat without handling errors.
-func (s *Service) MarkConnected(id uint, os, arch, version, remoteIP string) {
+func (s *Service) MarkConnected(id uint, f models.RunnerFacts) {
 	m, err := s.repo.FindByID(id)
 	if err != nil {
 		return
 	}
 	now := time.Now()
-	if remoteIP != "" {
-		m.RemoteIP = remoteIP
+	if f.RemoteIP != "" {
+		m.RemoteIP = f.RemoteIP
 	}
 
 	if connectionBroke(m, now) {
@@ -384,15 +384,17 @@ func (s *Service) MarkConnected(id uint, os, arch, version, remoteIP string) {
 		m.Status = models.RunnerStatusOnline
 	}
 	m.LastSeenAt = &now
-	if os != "" {
-		m.OS = os
+	if f.OS != "" {
+		m.OS = f.OS
 	}
-	if arch != "" {
-		m.Arch = arch
+	if f.Arch != "" {
+		m.Arch = f.Arch
 	}
-	if version != "" {
-		m.Version = version
+	if f.Version != "" {
+		m.Version = f.Version
 	}
+	// Replaced, not merged: a runner downgraded to a release without a feature must stop getting its jobs.
+	m.Features = f.Features
 	_ = s.repo.Update(m)
 }
 
