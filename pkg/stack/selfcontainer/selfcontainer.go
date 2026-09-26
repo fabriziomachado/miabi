@@ -41,7 +41,8 @@ func Detect() string {
 }
 
 // scan returns the first 64-hex container ID found on a line of path. When must
-// is non-empty, only lines containing that substring are considered.
+// is non-empty, only lines containing that substring are considered, and the ID
+// is the one right after it.
 func scan(path, must string) string {
 	f, err := os.Open(path)
 	if err != nil {
@@ -50,15 +51,29 @@ func scan(path, must string) string {
 	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		line := sc.Text()
-		if must != "" && !strings.Contains(line, must) {
-			continue
-		}
-		if id := containerID.FindString(line); id != "" {
+		if id := idOn(sc.Text(), must); id != "" {
 			return id
 		}
 	}
 	return ""
+}
+
+// idOn is scan's per-line rule. With must set, the ID has to follow it directly: a Docker data root
+// that is itself under a volume (Docker in Docker) puts that volume's 64-hex name earlier on the line.
+func idOn(line, must string) string {
+	if must == "" {
+		return containerID.FindString(line)
+	}
+	for rest := line; ; {
+		i := strings.Index(rest, must)
+		if i < 0 {
+			return ""
+		}
+		rest = rest[i+len(must):]
+		if loc := containerID.FindStringIndex(rest); loc != nil && loc[0] == 0 {
+			return rest[:loc[1]]
+		}
+	}
 }
 
 func isHex(s string) bool {
