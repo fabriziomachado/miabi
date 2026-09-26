@@ -1,0 +1,104 @@
+name: E2E
+
+# Installs the platform built from this commit on a clean runner and drives it end to end: the stack
+# installer, a manual install, a real workload behind the gateway, and GitOps. Unit tests live in ci.yml.
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: Build image
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: version
+        run: echo "version=e2e-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Built once and handed to both scenarios, so they test the same bytes.
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ github.sha }}
+            GO_TAGS=enterprise
+          tags: miabi/miabi:e2e
+          outputs: type=docker,dest=${{ runner.temp }}/miabi-e2e.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: miabi-e2e-image
+          path: ${{ runner.temp }}/miabi-e2e.tar
+          retention-days: 1
+
+  manual-install:
+    name: Manual install + edge gateway
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EXPECTED_VERSION: ${{ needs.image.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v5
+        with:
+          name: miabi-e2e-image
+          path: ${{ runner.temp }}
+      - run: docker load -i "$RUNNER_TEMP/miabi-e2e.tar"
+
+      - name: Bring up the manual stack
+        run: scripts/e2e/manual-install.sh
+      - name: Install the edge gateway on the manager
+        run: scripts/e2e/deploy-gateway.sh
+      - name: Deploy a workload
+        run: scripts/e2e/workload.sh
+      - name: Assert the install
+        run: scripts/e2e/assert.sh
+      - name: GitOps
+        run: scripts/e2e/gitops.sh
+
+      - name: Logs
+        if: failure()
+        run: scripts/e2e/collect-logs.sh
+
+  stack-install:
+    name: Stack install
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPECTED_VERSION: ${{ needs.image.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v5
+        with:
+          name: miabi-e2e-image
+          path: ${{ runner.temp }}
+      - run: docker load -i "$RUNNER_TEMP/miabi-e2e.tar"
+
+      - name: Install and assert
+        run: scripts/e2e/stack-install.sh
+
+      - name: Logs
+        if: failure()
+        run: scripts/e2e/collect-logs.sh
