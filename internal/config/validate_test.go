@@ -3,14 +3,17 @@
 
 package config
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 // prodConfig is a minimal non-dev Config with every guarded field set to a safe,
 // non-default value. Each test mutates one field to assert its guard fires.
 func prodConfig() *Config {
 	return &Config{
 		Env:           "production",
-		JWTSecret:     "a-real-secret",
+		JWTSecret:     "0123456789abcdef0123456789abcdef",
 		EncryptionKey: "a-real-key",
 		AdminPassword: "a-real-password",
 		CORSOrigins:   "https://panel.example.com",
@@ -43,6 +46,7 @@ func TestValidateRejectsInsecureDefaultsInNonDev(t *testing.T) {
 	}{
 		{"default jwt secret", func(c *Config) { c.JWTSecret = defaultJWTSecret }},
 		{"empty jwt secret", func(c *Config) { c.JWTSecret = "" }},
+		{"short jwt secret", func(c *Config) { c.JWTSecret = "a-real-but-short-secret" }},
 		{"empty encryption key", func(c *Config) { c.EncryptionKey = "" }},
 		{"whitespace encryption key", func(c *Config) { c.EncryptionKey = "   " }},
 		{"default admin password", func(c *Config) { c.AdminPassword = defaultAdminPassword }},
@@ -58,6 +62,24 @@ func TestValidateRejectsInsecureDefaultsInNonDev(t *testing.T) {
 				t.Fatalf("expected validate() to reject %q in non-dev, got nil", tt.name)
 			}
 		})
+	}
+}
+
+// An unset MIABI_ENV must not skip the secret checks (H2): a manual `docker run` without it would
+// otherwise boot on the public default JWT secret.
+func TestUnsetEnvDefaultsToProduction(t *testing.T) {
+	for _, k := range []string{"MIABI_ENV", "MIABI_JWT_SECRET", "MIABI_ENCRYPTION_KEY", "MIABI_ADMIN_PASSWORD"} {
+		t.Setenv(k, "") // registers the restore; the unset below is what New sees
+		if err := os.Unsetenv(k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := New()
+	if c.Env != "production" {
+		t.Fatalf("Env = %q with MIABI_ENV unset, want production", c.Env)
+	}
+	if err := c.validate(); err == nil {
+		t.Fatal("default secrets accepted with MIABI_ENV unset")
 	}
 }
 
