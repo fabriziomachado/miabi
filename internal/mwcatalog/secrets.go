@@ -34,6 +34,27 @@ func DecryptSecrets(mwType string, rule map[string]any) (map[string]any, error) 
 	})
 }
 
+// ReencryptSecrets returns a copy of rule with every encrypted secret rewritten under the workspace's
+// active key, and whether any changed. Legacy plaintext is left alone: crypto.Reencrypt would mangle it.
+func ReencryptSecrets(mwType string, workspaceID uint, rule map[string]any) (map[string]any, bool, error) {
+	changed := false
+	out, err := transformSecrets(mwType, rule, func(v string) (string, error) {
+		if !crypto.LooksEncrypted(v) {
+			return v, nil
+		}
+		nv, ch, err := crypto.Reencrypt(workspaceID, v)
+		if err != nil {
+			return "", err
+		}
+		changed = changed || ch
+		return nv, nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return out, changed, nil
+}
+
 // Redact returns a copy of rule with every secret value replaced by the redaction
 // sentinel, for API responses (never expose ciphertext or plaintext).
 func Redact(mwType string, rule map[string]any) map[string]any {

@@ -4,6 +4,8 @@
 package repositories
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/miabi-io/miabi/internal/models"
@@ -86,6 +88,40 @@ func (r *WorkspaceKeyRepository) DeleteOldVersions(workspaceID uint, keep int) e
 	return r.db.Where("workspace_id = ? AND version <> ?", workspaceID, keep).
 		Delete(&models.WorkspaceKey{}).Error
 }
+
+// StaleCiphertext lists the "table.column" locations that still hold the workspace's ciphertext under
+// a key version other than activeVersion. It scans every text and JSON column so it also catches owners
+// that were never registered for re-encryption; slow on large tables, but rotation is rare.
+func (r *WorkspaceKeyRepository) StaleCiphertext(workspaceID uint, activeVersion int) ([]string, error) {
+	var cols []struct {
+		TableName  string
+		ColumnName string
+	}
+	err := r.db.Raw(`SELECT c.table_name, c.column_name
+		FROM information_schema.columns c
+		JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+		WHERE c.table_schema = current_schema() AND t.table_type = 'BASE TABLE'
+		  AND c.data_type IN ('text', 'character varying', 'json', 'jsonb')
+		ORDER BY c.table_name, c.column_name`).Scan(&cols).Error
+	if err != nil {
+		return nil, err
+	}
+	pattern := fmt.Sprintf(`e2:w:%d:(?!%d:)[0-9]+:`, workspaceID, activeVersion)
+	var stale []string
+	for _, c := range cols {
+		var found bool
+		q := fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM %s WHERE %s::text ~ ?)`, quoteIdent(c.TableName), quoteIdent(c.ColumnName))
+		if err := r.db.Raw(q, pattern).Scan(&found).Error; err != nil {
+			return nil, fmt.Errorf("scan %s.%s: %w", c.TableName, c.ColumnName, err)
+		}
+		if found {
+			stale = append(stale, c.TableName+"."+c.ColumnName)
+		}
+	}
+	return stale, nil
+}
+
+func quoteIdent(s string) string { return `"` + strings.ReplaceAll(s, `"`, `""`) + `"` }
 
 // DeleteByWorkspace removes all of a workspace's keys (crypto-shred on delete).
 func (r *WorkspaceKeyRepository) DeleteByWorkspace(workspaceID uint) error {

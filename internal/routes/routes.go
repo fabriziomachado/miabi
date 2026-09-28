@@ -1212,6 +1212,8 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 		kr.Register(notificationService)
 		kr.Register(appService)
 		kr.Register(stackService)
+		kr.Register(backupSettingsService)
+		kr.Register(middlewareService)
 		keyRotator = kr
 		if cronManager != nil && cfg.KeyAutoRotate {
 			months := cfg.KeyRotateMonths
