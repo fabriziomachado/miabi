@@ -95,10 +95,10 @@ async function runImport() {
   importing.value = true
   try {
     const res = (await stackApi.import(currentWorkspaceId.value, importForm.value.name.trim(), importForm.value.compose, importForm.value.location)).data.data
-    const created = res?.created.length ?? 0
-    const vols = res?.volumes.length ?? 0
+    const created = res?.created?.length ?? 0
+    const vols = res?.volumes?.length ?? 0
     const reqs = res?.port_requests ?? 0
-    const skipped = res?.skipped.length ?? 0
+    const skipped = res?.skipped?.length ?? 0
     const conflicts = res?.port_conflicts ?? []
     const parts = [t('notify.stacks.importedApps', created)]
     if (vols) parts.push(t('count.volumes', vols))

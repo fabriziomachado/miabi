@@ -122,7 +122,8 @@ func (s *Service) ImportCompose(ctx context.Context, workspaceID, userID uint, n
 		return nil, err
 	}
 
-	result := &ImportResult{Stack: st}
+	// Empty lists, not nil: a nil slice encodes as null, which the console reads as a list.
+	result := &ImportResult{Stack: st, Created: []string{}, Volumes: []string{}, PortConflicts: []PortConflict{}, Skipped: []ImportSkip{}}
 	// Named volumes are shared across services, so provision each once and reuse.
 	volumes := map[string]*models.Volume{}
 
