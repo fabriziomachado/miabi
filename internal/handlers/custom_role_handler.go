@@ -13,7 +13,8 @@ import (
 	"github.com/miabi-io/miabi/internal/models"
 	"github.com/miabi-io/miabi/internal/services/audit"
 	"github.com/miabi-io/miabi/internal/services/customrole"
-	"github.com/miabi-io/miabi/internal/storage/repositories"
+	"github.com/miabi-io/miabi/internal/services/workspace"
+	"gorm.io/gorm"
 )
 
 // CustomRoleHandler manages admin-defined roles and their assignment to members.
@@ -21,12 +22,12 @@ import (
 // already-assigned roles is open-source (handled in WorkspaceScope).
 type CustomRoleHandler struct {
 	svc        *customrole.Service
-	workspaces *repositories.WorkspaceRepository
+	workspaces *workspace.Service
 	ee         enterprise.EE
 	audit      *audit.Logger
 }
 
-func NewCustomRoleHandler(svc *customrole.Service, workspaces *repositories.WorkspaceRepository, ee enterprise.EE, auditLog *audit.Logger) *CustomRoleHandler {
+func NewCustomRoleHandler(svc *customrole.Service, workspaces *workspace.Service, ee enterprise.EE, auditLog *audit.Logger) *CustomRoleHandler {
 	return &CustomRoleHandler{svc: svc, workspaces: workspaces, ee: ee, audit: auditLog}
 }
 
@@ -103,9 +104,9 @@ func (h *CustomRoleHandler) Delete(c *okapi.Context) error {
 	return message(c, "role deleted")
 }
 
-// AssignMember puts a member on a custom role. Gated custom_roles; the assigning
-// admin may not grant a role exceeding their own permissions, and the last owner
-// may not be moved off an owner-rank role.
+// AssignMember puts a member on a custom role. Gated custom_roles; the assigner may not grant
+// permissions they lack, a base rank above their own, or touch a member who outranks them,
+// and the last owner may not be moved off an owner-rank role.
 func (h *CustomRoleHandler) AssignMember(c *okapi.Context, req *AssignCustomRoleRequest) error {
 	if err := h.ee.RequireMutable(enterprise.FlagCustomRoles); err != nil {
 		return entitlementAbort(c, err)
@@ -126,16 +127,20 @@ func (h *CustomRoleHandler) AssignMember(c *okapi.Context, req *AssignCustomRole
 			return c.AbortForbidden(customrole.ErrEscalation.Error(), customrole.ErrEscalation)
 		}
 	}
-	// Never strand the last owner on a non-owner role.
-	if role.BaseRole != models.WorkspaceRoleOwner {
-		if m, e := h.workspaces.FindMember(wsID, memberID); e == nil && m.Role == models.WorkspaceRoleOwner {
-			if n, _ := h.workspaces.CountOwners(wsID); n <= 1 {
-				return c.AbortWithError(409, errors.New("cannot move the last owner off the owner role"))
-			}
+	if err := h.workspaces.AssignCustomRole(wsID, middlewares.WorkspaceRole(c), memberID, role.ID, role.BaseRole); err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			return c.AbortNotFound("member not found")
+		case errors.Is(err, workspace.ErrOutranked), errors.Is(err, workspace.ErrRoleAboveSelf),
+			errors.Is(err, workspace.ErrWorkspaceLimitReached):
+			return c.AbortForbidden(err.Error(), err)
+		case errors.Is(err, workspace.ErrLastOwner):
+			return c.AbortWithError(409, err)
+		case errors.Is(err, workspace.ErrInvalidRole):
+			return c.AbortBadRequest(err.Error())
+		default:
+			return c.AbortInternalServerError("failed to assign role", err)
 		}
-	}
-	if err := h.workspaces.SetMemberCustomRole(wsID, memberID, role.ID, role.BaseRole); err != nil {
-		return c.AbortInternalServerError("failed to assign role", err)
 	}
 	h.record(c, wsID, "workspace.member_role_assign", strconv.Itoa(int(memberID)))
 	return message(c, "role assigned")

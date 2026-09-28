@@ -148,3 +148,46 @@ func TestUnknownActorRoleIsRejected(t *testing.T) {
 		t.Fatalf("empty actor role: got %v, want ErrOutranked", err)
 	}
 }
+
+// H5: a custom role's base rank is a role grant and is bounded like one.
+func TestAdminCannotAssignOwnerRankCustomRole(t *testing.T) {
+	s := fullWorkspace(t)
+	if err := s.AssignCustomRole(1, models.WorkspaceRoleAdmin, uAdmin, 7, models.WorkspaceRoleOwner); !errors.Is(err, ErrRoleAboveSelf) {
+		t.Fatalf("admin self-assigning an owner-rank custom role: got %v, want ErrRoleAboveSelf", err)
+	}
+	if err := s.AssignCustomRole(1, models.WorkspaceRoleAdmin, uDev, 7, models.WorkspaceRoleOwner); !errors.Is(err, ErrRoleAboveSelf) {
+		t.Fatalf("admin granting an owner-rank custom role: got %v, want ErrRoleAboveSelf", err)
+	}
+}
+
+func TestAdminCannotDemoteOwnerViaCustomRole(t *testing.T) {
+	s := fullWorkspace(t)
+	if err := s.AssignCustomRole(1, models.WorkspaceRoleAdmin, uOwner, 7, models.WorkspaceRoleViewer); !errors.Is(err, ErrOutranked) {
+		t.Fatalf("admin moving an owner onto a custom role: got %v, want ErrOutranked", err)
+	}
+}
+
+func TestCustomRoleAssignmentWithinRank(t *testing.T) {
+	s := fullWorkspace(t)
+	if err := s.AssignCustomRole(1, models.WorkspaceRoleAdmin, uDev, 7, models.WorkspaceRoleAdmin); err != nil {
+		t.Fatalf("admin assigning an admin-rank custom role: got %v, want nil", err)
+	}
+	if err := s.AssignCustomRole(1, models.WorkspaceRoleOwner, uOwner2, 8, models.WorkspaceRoleOwner); err != nil {
+		t.Fatalf("owner moving a co-owner onto an owner-rank custom role: got %v, want nil", err)
+	}
+}
+
+// Promotion to owner rank through a custom role counts against the ownership limit (0 in this fixture).
+func TestOwnerRankCustomRoleRespectsOwnershipLimit(t *testing.T) {
+	s := fullWorkspace(t)
+	if err := s.AssignCustomRole(1, models.WorkspaceRoleOwner, uAdmin, 8, models.WorkspaceRoleOwner); !errors.Is(err, ErrWorkspaceLimitReached) {
+		t.Fatalf("owner promoting an admin past the ownership limit: got %v, want ErrWorkspaceLimitReached", err)
+	}
+}
+
+func TestLastOwnerGuardedOnCustomRole(t *testing.T) {
+	s := seedMembers(t, map[uint]models.WorkspaceRole{uOwner: models.WorkspaceRoleOwner})
+	if err := s.AssignCustomRole(1, models.WorkspaceRoleOwner, uOwner, 7, models.WorkspaceRoleAdmin); !errors.Is(err, ErrLastOwner) {
+		t.Fatalf("moving the last owner onto an admin-rank custom role: got %v, want ErrLastOwner", err)
+	}
+}

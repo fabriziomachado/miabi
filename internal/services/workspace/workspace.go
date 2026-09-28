@@ -515,6 +515,28 @@ func (s *Service) UpdateMemberRole(workspaceID uint, actor models.WorkspaceRole,
 	return s.repo.UpdateMemberRole(workspaceID, userID, role)
 }
 
+// AssignCustomRole puts a member on a custom role whose rank is baseRole, under the same rank,
+// last-owner and ownership-limit rules as a built-in role change.
+func (s *Service) AssignCustomRole(workspaceID uint, actor models.WorkspaceRole, userID, customRoleID uint, baseRole models.WorkspaceRole) error {
+	if !baseRole.Valid() {
+		return ErrInvalidRole
+	}
+	if err := s.guardRank(workspaceID, actor, userID, &baseRole); err != nil {
+		return err
+	}
+	if baseRole != models.WorkspaceRoleOwner {
+		if err := s.guardLastOwner(workspaceID, userID); err != nil {
+			return err
+		}
+	} else if member, err := s.repo.FindMember(workspaceID, userID); err != nil ||
+		member.Role != models.WorkspaceRoleOwner {
+		if err := s.canOwnAnother(userID); err != nil {
+			return err
+		}
+	}
+	return s.repo.SetMemberCustomRole(workspaceID, userID, customRoleID, baseRole)
+}
+
 // RemoveMember removes a member, refusing to remove the last owner or a member
 // who outranks the caller.
 func (s *Service) RemoveMember(workspaceID uint, actor models.WorkspaceRole, userID uint) error {

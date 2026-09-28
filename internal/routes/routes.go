@@ -1350,7 +1350,7 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 			adminOrganization: handlers.NewAdminOrganizationHandler(organizationService, userRepo, clusterRepo, workspaceRepo, ee, auditLogger),
 			ldapAdmin:         handlers.NewLDAPAdminHandler(ldapRepo, ee, auditLogger),
 			permission:        handlers.NewPermissionHandler(),
-			customRole:        handlers.NewCustomRoleHandler(customRoleService, workspaceRepo, ee, auditLogger),
+			customRole:        handlers.NewCustomRoleHandler(customRoleService, workspaceService, ee, auditLogger),
 			auditExport:       handlers.NewAuditExportHandler(auditRepo, ee),
 			resourcePolicy:    handlers.NewResourcePolicyHandler(resourcePolicyRepo, workspaceRepo, ee, auditLogger),
 			siemAdmin:         handlers.NewSIEMAdminHandler(siemConfigRepo, siemStreamer, ee, auditLogger),
