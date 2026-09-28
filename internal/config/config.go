@@ -567,7 +567,7 @@ func New() *Config {
 			Password: goutils.Env("MIABI_REDIS_PASSWORD", ""),
 			DB:       goutils.EnvInt("MIABI_REDIS_DB", 0),
 		},
-		Env:                   goutils.Env("MIABI_ENV", "dev"),
+		Env:                   goutils.Env("MIABI_ENV", "production"),
 		Port:                  goutils.EnvInt("MIABI_PORT", 9000),
 		DevMode:               goutils.EnvBool("MIABI_DEV_MODE", false),
 		LogLevel:              goutils.Env("MIABI_LOG_LEVEL", ""),
@@ -721,6 +721,7 @@ func New() *Config {
 const (
 	defaultJWTSecret     = "change-me-in-production"
 	defaultAdminPassword = "admin@1234"
+	minSecretLen         = 32
 )
 
 func (c *Config) validate() error {
@@ -743,6 +744,9 @@ func (c *Config) validate() error {
 	// and CORS) that must not run on a shipped default.
 	if c.JWTSecret == "" || c.JWTSecret == defaultJWTSecret {
 		return fmt.Errorf("MIABI_JWT_SECRET must be set to a non-default value in non-dev environments")
+	}
+	if len(c.JWTSecret) < minSecretLen {
+		return fmt.Errorf("MIABI_JWT_SECRET must be at least %d characters in non-dev environments; generate one with `openssl rand -hex 32` (changing it signs everyone out)", minSecretLen)
 	}
 	if strings.TrimSpace(c.EncryptionKey) == "" {
 		return fmt.Errorf("MIABI_ENCRYPTION_KEY must be set in non-dev environments; without it, secrets are stored unencrypted at rest")
@@ -886,6 +890,9 @@ func (c *Config) Initialize(app *okapi.Okapi) error {
 	// non-dev); make the downgrade to unencrypted-at-rest impossible to miss.
 	if strings.TrimSpace(c.EncryptionKey) == "" {
 		logger.Warn("MIABI_ENCRYPTION_KEY is not set — secrets are stored WITHOUT encryption at rest (permitted only in dev)")
+	} else if len(c.EncryptionKey) < minSecretLen {
+		// Warn, never refuse: replacing a live key would make every workspace key unrecoverable.
+		logger.Warn("MIABI_ENCRYPTION_KEY is shorter than the recommended 32 characters; use `openssl rand -hex 32` for new installs")
 	}
 
 	corsOrigins := strings.Split(c.CORSOrigins, ",")
