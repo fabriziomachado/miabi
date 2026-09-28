@@ -88,8 +88,15 @@ func Discover(ctx context.Context, url, ref string, auth transport.AuthMethod) (
 	}
 	defer cleanup()
 
+	// os.Root, not os.DirFS: a committed symlink must not read files outside the checkout.
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("open probe dir: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+
 	f := &Found{Ref: ref, Commit: commit}
-	fsys := os.DirFS(dir)
+	fsys := root.FS()
 	if st, err := fs.Stat(fsys, "Dockerfile"); err == nil && !st.IsDir() {
 		f.HasDockerfile = true
 	}
@@ -126,8 +133,7 @@ func cloneWorktree(ctx context.Context, url, ref string, auth transport.AuthMeth
 		return dir, head.Hash().String(), cleanup, nil
 	}
 	cleanup()
-	// A shallow clone of HEAD failing, or the caller giving up, is terminal —
-	// only an unresolvable ref is worth a second, more expensive attempt.
+
 	if ref == "" || ctx.Err() != nil {
 		return "", "", nil, fmt.Errorf("git clone: %w", cloneErr)
 	}
