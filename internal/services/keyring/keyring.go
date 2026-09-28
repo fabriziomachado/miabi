@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,9 +35,15 @@ type Reencryptor interface {
 type RotateResult struct {
 	Version     int `json:"version"`
 	Reencrypted int `json:"reencrypted"`
+	// StaleColumns lists the "table.column" locations that kept old key versions alive (ErrStaleCiphertext).
+	StaleColumns []string `json:"stale_columns,omitempty"`
 }
 
 const dekSize = 32 // AES-256
+
+// ErrStaleCiphertext reports that a rotation left values under an old key version, so the old versions
+// were kept. The data stays readable; the owner of the listed columns needs a Reencryptor.
+var ErrStaleCiphertext = errors.New("keyring: old key versions kept, ciphertext still references them")
 
 // Service is the DB-backed keyring.
 type Service struct {
@@ -137,7 +144,7 @@ func (s *Service) generate(workspaceID uint, version int, active bool) (*models.
 
 // Rotate creates a new active DEK version for the workspace and re-encrypts all registered owners' data to
 // it. On a partial sweep old versions are RETAINED but deactivated, so not-yet-swept ciphertext stays
-// decryptable — rotation is always safe. A full sweep retires them.
+// decryptable — rotation is always safe. A full sweep retires them once no stored value references them.
 func (s *Service) Rotate(ctx context.Context, workspaceID uint) (RotateResult, error) {
 	next, err := s.repo.MaxVersion(workspaceID)
 	if err != nil {
@@ -158,24 +165,36 @@ func (s *Service) Rotate(ctx context.Context, workspaceID uint) (RotateResult, e
 		return RotateResult{}, err
 	}
 	// New writes now use `next` (FindActive returns it). Re-encrypt existing data.
-	total, err := s.sweep(ctx, workspaceID)
+	res := RotateResult{Version: next}
+	res.Reencrypted, err = s.sweep(ctx, workspaceID)
 	if err == nil {
-		// Full sweep succeeded: every value is on the new version, so the old DEKs
-		// are unreferenced and can be retired. On partial failure we keep them so
-		// un-swept ciphertext stays decryptable.
-		if perr := s.repo.DeleteOldVersions(workspaceID, next); perr != nil {
-			logger.Warn("keyring: prune old key versions failed", "workspace", workspaceID, "error", perr)
-		} else {
-			s.mu.Lock()
-			for k := range s.cache {
-				if k.ws == workspaceID && k.ver != next {
-					delete(s.cache, k)
-				}
-			}
-			s.mu.Unlock()
+		res.StaleColumns, err = s.retireOldVersions(workspaceID, next)
+	}
+	return res, err
+}
+
+// retireOldVersions deletes every DEK version but active once no stored value still references one.
+// A sweep only covers registered owners, so the database is checked rather than trusted.
+func (s *Service) retireOldVersions(workspaceID uint, active int) ([]string, error) {
+	stale, err := s.repo.StaleCiphertext(workspaceID, active)
+	if err != nil {
+		return nil, fmt.Errorf("keyring: verify rotation sweep: %w", err)
+	}
+	if len(stale) > 0 {
+		return stale, fmt.Errorf("%w: %s", ErrStaleCiphertext, strings.Join(stale, ", "))
+	}
+	if err := s.repo.DeleteOldVersions(workspaceID, active); err != nil {
+		logger.Warn("keyring: prune old key versions failed", "workspace", workspaceID, "error", err)
+		return nil, nil
+	}
+	s.mu.Lock()
+	for k := range s.cache {
+		if k.ws == workspaceID && k.ver != active {
+			delete(s.cache, k)
 		}
 	}
-	return RotateResult{Version: next, Reencrypted: total}, err
+	s.mu.Unlock()
+	return nil, nil
 }
 
 // Migrate ensures the workspace has an active DEK and re-encrypts existing legacy

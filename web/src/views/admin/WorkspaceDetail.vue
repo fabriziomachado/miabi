@@ -288,7 +288,11 @@ async function rotateKey() {
   rotating.value = true
   try {
     const res = (await adminApi.rotateWorkspaceKey(ws.value.id)).data.data
-    notify.success(`Key rotated (v${res.version}) — re-encrypted ${res.reencrypted} secret${res.reencrypted === 1 ? '' : 's'}`)
+    if (res.stale_columns?.length) {
+      notify.info(`Key rotated (v${res.version}), but old key versions were kept: ${res.stale_columns.join(', ')} still use them`)
+    } else {
+      notify.success(`Key rotated (v${res.version}) — re-encrypted ${res.reencrypted} secret${res.reencrypted === 1 ? '' : 's'}`)
+    }
   } catch (e) {
     notify.apiError(e)
   } finally {

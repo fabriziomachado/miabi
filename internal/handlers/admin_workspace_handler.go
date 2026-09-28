@@ -59,7 +59,8 @@ func (h *AdminWorkspaceHandler) RotateKey(c *okapi.Context) error {
 		return c.AbortBadRequest("invalid workspace id")
 	}
 	res, err := h.keys.Rotate(c.Request().Context(), uint(id))
-	if err != nil {
+	// Stale ciphertext means the new key is live and the old ones were kept: a rotation, not a failure.
+	if err != nil && !errors.Is(err, keyring.ErrStaleCiphertext) {
 		return c.AbortInternalServerError("key rotation failed", err)
 	}
 	actor := middlewares.UserID(c)
@@ -67,7 +68,7 @@ func (h *AdminWorkspaceHandler) RotateKey(c *okapi.Context) error {
 	h.audit.Record(audit.Entry{
 		ActorID: &actor, WorkspaceID: &wsID, Action: "admin.workspace.rotate_key",
 		TargetType: "workspace", TargetID: strconv.Itoa(id), IP: c.RealIP(),
-		Metadata: map[string]any{"version": res.Version, "reencrypted": res.Reencrypted},
+		Metadata: map[string]any{"version": res.Version, "reencrypted": res.Reencrypted, "stale_columns": res.StaleColumns},
 	})
 	return ok(c, res)
 }
