@@ -407,6 +407,7 @@ function stepIcon(status: string): string {
   switch (status) {
     case 'done': return 'mdi-check-circle'
     case 'error': return 'mdi-alert-circle'
+    case 'warning': return 'mdi-alert'
     case 'active': return 'mdi-loading mdi-spin'
     default: return 'mdi-circle-outline'
   }
@@ -473,15 +474,20 @@ function startJobStream(id: string) {
 // so the user can read the error and go back to adjust the form).
 function onJobDone(job: InstallJob) {
   if (job.status === 'succeeded') {
-    const r = job.result
     notify.success(t('notify.templateInstall.installed', { name: form.value.name || entry.value?.display_name }))
-    if (r?.stack?.id) router.push({ name: 'stack-detail', params: { id: r.stack.id } })
-    else if (r?.apps?.length === 1) router.push({ name: 'app-detail', params: { id: r.apps[0].id } })
-    else router.push({ name: 'marketplace' })
+    // With warnings the dialog stays open so they can be read; Continue then navigates.
+    if (!job.warnings?.length) openInstalled(job)
   } else {
     installing.value = false
     notify.error(job.error || t('notify.templateInstall.installFailed'))
   }
+}
+
+function openInstalled(job: InstallJob) {
+  const r = job.result
+  if (r?.stack?.id) router.push({ name: 'stack-detail', params: { id: r.stack.id } })
+  else if (r?.apps?.length === 1) router.push({ name: 'app-detail', params: { id: r.apps[0].id } })
+  else router.push({ name: 'marketplace' })
 }
 
 // closeProgress dismisses the progress view after a failure, returning to the form.
@@ -698,8 +704,9 @@ onUnmounted(stopJobStream)
       <!-- Live progress (during install) -->
       <AppModal v-else-if="(confirmOpen && entry) && installJob" @close="confirmOpen = false">
         <div class="modal-header">
-          <h3>{{ installJob.status === 'failed' ? 'Install failed' : `Installing ${form.name || entry.display_name}` }}</h3>
-          <button v-if="installJob.status !== 'running'" class="btn-icon btn-icon-muted" :aria-label="$t('shell.close')" @click="closeProgress">
+          <h3>{{ installJob.status === 'failed' ? 'Install failed' : installJob.status === 'succeeded' ? `Installed ${form.name || entry.display_name}` : `Installing ${form.name || entry.display_name}` }}</h3>
+          <button v-if="installJob.status !== 'running'" class="btn-icon btn-icon-muted" :aria-label="$t('shell.close')"
+            @click="installJob.status === 'succeeded' ? openInstalled(installJob) : closeProgress()">
             <span class="mdi mdi-close"></span>
           </button>
         </div>
@@ -717,9 +724,18 @@ onUnmounted(stopJobStream)
             <span class="mdi mdi-alert-outline"></span>
             <div>{{ installJob.error || 'The install could not be completed.' }}</div>
           </div>
+          <div v-if="installJob.warnings?.length" class="warning-note">
+            <span class="mdi mdi-alert-outline"></span>
+            <ul>
+              <li v-for="w in installJob.warnings" :key="w">{{ w }}</li>
+            </ul>
+          </div>
         </div>
         <div v-if="installJob.status === 'failed'" class="modal-footer">
           <button type="button" class="btn btn-secondary" @click="closeProgress">{{ $t('marketplace.backToForm') }}</button>
+        </div>
+        <div v-else-if="installJob.status === 'succeeded' && installJob.warnings?.length" class="modal-footer">
+          <button type="button" class="btn btn-primary" @click="openInstalled(installJob)">Continue</button>
         </div>
       </AppModal>
     </Teleport>
@@ -1050,6 +1066,24 @@ onUnmounted(stopJobStream)
 }
 .install-step.is-error .step-icon {
   color: var(--danger-500);
+}
+.install-step.is-warning .step-icon {
+  color: var(--warning-600);
+}
+.warning-note {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--warning-50);
+  color: var(--warning-600);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.warning-note ul {
+  margin: 0;
+  padding-left: 16px;
 }
 .install-msg {
   margin-top: 12px;

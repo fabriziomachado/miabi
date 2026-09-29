@@ -24,6 +24,7 @@ const (
 	PhaseConfigs   = "configs"
 	PhaseConfig    = "config"
 	PhaseDeploy    = "deploy"
+	PhaseRoutes    = "routes"
 )
 
 // PhaseStatus is the state of a single install phase.
@@ -34,6 +35,8 @@ const (
 	PhaseActive  PhaseStatus = "active"
 	PhaseDone    PhaseStatus = "done"
 	PhaseError   PhaseStatus = "error"
+	// PhaseWarning is a finished phase that skipped part of its work, e.g. a route with no domain.
+	PhaseWarning PhaseStatus = "warning"
 )
 
 // JobStatus is the overall state of an install job.
@@ -60,8 +63,10 @@ type InstallJob struct {
 	Status  JobStatus      `json:"status"`
 	Phases  []InstallPhase `json:"phases"`
 	Message string         `json:"message,omitempty"`
-	Result  *InstallResult `json:"result,omitempty"`
-	Error   string         `json:"error,omitempty"`
+	// Warnings are non-fatal problems the install worked around, shown after it completes.
+	Warnings []string       `json:"warnings,omitempty"`
+	Result   *InstallResult `json:"result,omitempty"`
+	Error    string         `json:"error,omitempty"`
 
 	workspaceID uint
 	doneAt      time.Time
@@ -72,6 +77,7 @@ type InstallJob struct {
 func (j *InstallJob) snapshot() InstallJob {
 	cp := *j
 	cp.Phases = append([]InstallPhase(nil), j.Phases...)
+	cp.Warnings = append([]string(nil), j.Warnings...)
 	return cp
 }
 
@@ -108,6 +114,9 @@ func buildPhases(m *manifest.Manifest) []InstallPhase {
 			add(PhaseConfigs, "Creating configuration files")
 		}
 		add(PhaseConfig, "Configuring environment & secrets")
+		if len(m.Routes) > 0 {
+			add(PhaseRoutes, "Creating routes")
+		}
 		add(PhaseDeploy, "Deploying applications")
 	}
 	return p
@@ -133,6 +142,17 @@ func (r *reporter) phase(key string, st PhaseStatus) {
 			r.job.Phases[i].Status = st
 		}
 	}
+	snap := r.job.snapshot()
+	r.s.jobsMu.Unlock()
+	r.s.publishJob(snap)
+}
+
+func (r *reporter) warn(msg string) {
+	if r == nil {
+		return
+	}
+	r.s.jobsMu.Lock()
+	r.job.Warnings = append(r.job.Warnings, msg)
 	snap := r.job.snapshot()
 	r.s.jobsMu.Unlock()
 	r.s.publishJob(snap)
@@ -307,7 +327,9 @@ func (s *Service) finishJob(job *InstallJob, st JobStatus, result *InstallResult
 		}
 	} else {
 		for i := range job.Phases {
-			job.Phases[i].Status = PhaseDone
+			if job.Phases[i].Status != PhaseWarning {
+				job.Phases[i].Status = PhaseDone
+			}
 		}
 	}
 	job.doneAt = time.Now()

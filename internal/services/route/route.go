@@ -137,6 +137,19 @@ func (s *Service) privileged(workspaceID uint) bool {
 // validateHosts requires every non-empty host to fall under a domain registered
 // in the workspace. A catch-all route (no hosts) and an unset domain registry
 // are both allowed.
+// CoveringDomain returns the workspace domain a host falls under, or nil when none is registered or
+// domain checks are not wired.
+func (s *Service) CoveringDomain(workspaceID uint, host string) (*models.Domain, error) {
+	if s.domains == nil {
+		return nil, nil
+	}
+	domains, err := s.domains.ListByWorkspace(workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return matchDomain(strings.ToLower(strings.TrimSpace(host)), domains), nil
+}
+
 func (s *Service) validateHosts(workspaceID uint, hosts []string) error {
 	if s.domains == nil {
 		return nil
