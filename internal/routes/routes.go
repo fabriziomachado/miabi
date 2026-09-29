@@ -1379,8 +1379,9 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 				if srv == nil || srv.IsLocal || srv.Connectivity != models.ConnectivityEdgeGateway {
 					return handlers.AnalyticsForwarderConfig{}
 				}
-				pw, err := nodeService.GatewayRedisPassword(srv.ID)
-				if err != nil {
+
+				pw, err := nodeService.StoredGatewayRedisPassword(srv.ID)
+				if err != nil || pw == "" {
 					return handlers.AnalyticsForwarderConfig{}
 				}
 				return handlers.AnalyticsForwarderConfig{

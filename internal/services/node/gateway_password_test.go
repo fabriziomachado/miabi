@@ -87,3 +87,32 @@ func TestServerUpdateNeverWritesTheRedisPassword(t *testing.T) {
 		t.Fatalf("Update writes the gateway Redis password: %s", all)
 	}
 }
+
+// The analytics forwarder reads the password; minting one there is how a reinstalled node ended up with
+// a password its running Redis never got.
+func TestStoredGatewayRedisPasswordNeverMints(t *testing.T) {
+	crypto.Init("test-master-key")
+	t.Cleanup(func() { crypto.Init("") })
+	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&passwordRow{}); err != nil {
+		t.Fatal(err)
+	}
+	db.Create(&passwordRow{ID: 1, Name: "edge-1"})
+	s := NewService(repositories.NewServerRepository(db), nil)
+
+	if pw, err := s.StoredGatewayRedisPassword(1); err != nil || pw != "" {
+		t.Fatalf("before any deploy: %q, %v", pw, err)
+	}
+	var row passwordRow
+	db.First(&row, 1)
+	if row.GatewayRedisPasswordEnc != "" {
+		t.Fatal("reading the password minted one")
+	}
+	minted, _ := s.GatewayRedisPassword(1)
+	if pw, _ := s.StoredGatewayRedisPassword(1); pw != minted {
+		t.Fatal("stored password differs from the minted one")
+	}
+}
