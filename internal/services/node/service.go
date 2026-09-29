@@ -673,9 +673,13 @@ func (s *Service) GatewayRedisPassword(id uint) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	srv.GatewayRedisPasswordEnc = enc
-	if err := s.repo.Update(srv); err != nil {
+
+	stored, err := s.repo.ClaimGatewayRedisPassword(id, enc, srv.GatewayRedisPasswordEnc != "")
+	if err != nil {
 		return "", err
+	}
+	if !stored {
+		return s.GatewayRedisPassword(id)
 	}
 	return pw, nil
 }

@@ -5,6 +5,7 @@ package edgegateway
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/miabi-io/miabi/internal/docker"
@@ -177,5 +178,58 @@ func TestFindCentralMatchesByRoleThenName(t *testing.T) {
 	other.containers["x"] = docker.Container{ID: "g3", Names: []string{"/some-app"}, Image: "nginx"}
 	if c, ok := FindCentral(context.Background(), other); ok {
 		t.Fatalf("FindCentral = (%+v, %v); want no match", c, ok)
+	}
+}
+
+func ranRedis(f *fakeDC) int {
+	n := 0
+	for _, spec := range f.ran {
+		if spec.Name == RedisContainer {
+			n++
+		}
+	}
+	return n
+}
+
+// A reinstalled node gets a new Redis password; the Redis still running with the old one must be
+// replaced, or the gateway started with the new password is refused (WRONGPASS).
+func TestNodeRedisRecreatedWhenPasswordChanges(t *testing.T) {
+	s, dc, srv := ensureService(), newFakeDC(), edgeNode()
+	ctx := context.Background()
+
+	if err := s.ensureNodeRedis(ctx, dc, srv, "first-password"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ensureNodeRedis(ctx, dc, srv, "first-password"); err != nil {
+		t.Fatal(err)
+	}
+	if n := ranRedis(dc); n != 1 {
+		t.Fatalf("same password: redis started %d times, want 1 (kept)", n)
+	}
+
+	if err := s.ensureNodeRedis(ctx, dc, srv, "second-password"); err != nil {
+		t.Fatal(err)
+	}
+	if n := ranRedis(dc); n != 2 {
+		t.Fatalf("new password: redis started %d times, want 2 (recreated)", n)
+	}
+	last := dc.ran[len(dc.ran)-1]
+	if !strings.Contains(strings.Join(last.Cmd, " "), "--requirepass second-password") {
+		t.Fatalf("recreated redis cmd = %v", last.Cmd)
+	}
+}
+
+// Redis started before the spec hash existed carries no label; it is recreated once, then kept.
+func TestNodeRedisWithoutSpecHashIsRecreatedOnce(t *testing.T) {
+	s, dc, srv := ensureService(), newFakeDC(), edgeNode()
+	dc.containers[RedisContainer] = docker.Container{Names: []string{"/" + RedisContainer}, State: "running", Labels: map[string]string{}}
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if err := s.ensureNodeRedis(ctx, dc, srv, "pw"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := ranRedis(dc); n != 1 {
+		t.Fatalf("redis started %d times, want 1", n)
 	}
 }
