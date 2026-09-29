@@ -137,6 +137,18 @@ func (h *LicenseHandler) Get(c *okapi.Context) error {
 	return ok(c, h.view())
 }
 
+type LicenseEntitlements struct {
+	Edition string          `json:"edition"`
+	Tier    string          `json:"tier,omitempty"`
+	State   string          `json:"state"`
+	Flags   map[string]bool `json:"flags"`
+}
+
+func (h *LicenseHandler) Entitlements(c *okapi.Context) error {
+	ent := h.ee.Entitlements()
+	return ok(c, LicenseEntitlements{Edition: ent.Edition, Tier: ent.Tier, State: ent.State, Flags: ent.Flags})
+}
+
 // Health returns just the warnings list (drives the global UI banner).
 func (h *LicenseHandler) Health(c *okapi.Context) error {
 	ent := h.ee.Entitlements()

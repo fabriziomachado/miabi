@@ -18,6 +18,7 @@ func (r *Router) adminRoutes() []okapi.RouteDefinition {
 	g := r.v1.Group("/admin").WithTagInfo(okapi.GroupTag{Name: "Admin", Description: "Platform administration: users, settings, events, metrics, jobs."})
 	admin := []okapi.Middleware{r.authenticate, r.systemAdmin}
 	sensitive := []okapi.Middleware{r.authenticate, r.systemAdmin, r.freshElevation}
+	sys := r.v1.Group("/system").WithTagInfo(okapi.GroupTag{Name: "License", Description: "License entitlements visible to every signed-in user."})
 
 	return []okapi.RouteDefinition{
 		{
@@ -794,8 +795,15 @@ func (r *Router) adminRoutes() []okapi.RouteDefinition {
 			Request:     &handlers.CompleteRecoveryRequest{},
 		},
 
-		// Commercial license (Enterprise). In Community builds Install
-		// returns 402 and Get reports edition "community".
+		{
+			Method:      http.MethodGet,
+			Path:        "/license/entitlements",
+			Group:       sys,
+			Middlewares: []okapi.Middleware{r.authenticate},
+			Handler:     r.h.license.Entitlements,
+			Summary:     "License edition, state and feature flags (any signed-in user)",
+			Response:    &dto.Response[handlers.LicenseEntitlements]{},
+		},
 		{
 			Method:      http.MethodGet,
 			Path:        "/license",

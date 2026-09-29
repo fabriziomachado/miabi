@@ -59,7 +59,7 @@ onMounted(async () => {
   // refresh it — the workspace store and the theme both read fields that only a
   // current /me carries.
   if (!auth.user || !auth.user.preferences) await auth.fetchUser()
-  if (auth.isAdmin) license.load().catch(() => { })
+  license.load().catch(() => { })
   try {
     await ws.fetchWorkspaces()
   } catch {
