@@ -632,14 +632,15 @@ func (s *Service) createApp(workspaceID uint, m *manifest.Manifest, spec manifes
 		name = fmt.Sprintf("%s %s", baseName, spec.Name)
 	}
 	in := application.CreateInput{
-		DisplayName: name,
-		SourceType:  models.AppSourceImage,
-		Icon:        m.Metadata.Icon,
-		Image:       spec.Image,
-		Tag:         spec.Tag,
-		Command:     spec.Command,
-		StackID:     stackID,
-		ServerID:    serverID,
+		DisplayName:   name,
+		SourceType:    models.AppSourceImage,
+		Icon:          m.Metadata.Icon,
+		Image:         spec.Image,
+		Tag:           spec.Tag,
+		Command:       spec.Command,
+		RestartPolicy: models.RestartPolicy(spec.RestartPolicy),
+		StackID:       stackID,
+		ServerID:      serverID,
 		Metadata: models.SetBuiltin(models.Metadata{},
 			models.MetaManagedBy, models.ManagedByMarketplace,
 			models.MetaTemplate, m.Metadata.Name,

@@ -270,3 +270,27 @@ func TestRandAlphaNumLength(t *testing.T) {
 		t.Errorf("len = %d, want 24", got)
 	}
 }
+
+func TestRestartPolicy(t *testing.T) {
+	tmpl := func(policy string) string {
+		return `
+apiVersion: miabi.io/v1
+kind: Template
+metadata: {name: a, displayName: A, version: "1.0.0"}
+applications:
+  - name: migrate
+    image: example/migrate
+    restartPolicy: ` + policy + `
+`
+	}
+	m, err := Parse([]byte(tmpl("on-failure")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Applications[0].RestartPolicy; got != "on-failure" {
+		t.Fatalf("restartPolicy = %q, want on-failure", got)
+	}
+	if _, err := Parse([]byte(tmpl("sometimes"))); err == nil {
+		t.Fatal("an unknown restartPolicy was accepted")
+	}
+}
