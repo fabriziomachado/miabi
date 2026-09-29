@@ -109,11 +109,14 @@ export interface InstallResult {
   databases?: { id: number; name: string }[]
   volumes?: { id: number; name: string }[]
   configs?: { id: number; name: string }[]
+  routes?: { id: number; name: string; hosts?: string[] }[]
+  // Problems the install worked around, e.g. a route skipped for lack of a domain.
+  warnings?: string[]
 }
 
 // --- Async install progress (SSE) ---
 
-export type InstallPhaseStatus = 'pending' | 'active' | 'done' | 'error'
+export type InstallPhaseStatus = 'pending' | 'active' | 'done' | 'error' | 'warning'
 
 // InstallPhase is one step of an install, rendered as a stepper row.
 export interface InstallPhase {
@@ -130,6 +133,7 @@ export interface InstallJob {
   status: InstallJobStatus
   phases: InstallPhase[]
   message?: string
+  warnings?: string[]
   result?: InstallResult
   error?: string
 }

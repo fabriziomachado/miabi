@@ -66,6 +66,7 @@ type Service struct {
 	// event bus to the install UI. bus may be nil in tests / when unwired.
 	bus    *eventbus.Bus
 	placer Placer
+	routes RouteCreator
 	jobsMu sync.Mutex
 	jobs   map[string]*InstallJob
 }
@@ -275,6 +276,9 @@ type InstallResult struct {
 	Volumes     []*models.Volume           `json:"volumes,omitempty"`
 	Configs     []*models.Config           `json:"configs,omitempty"`
 	InstallID   uint                       `json:"install_id,omitempty"`
+	Routes      []*models.Route            `json:"routes,omitempty"`
+	// Warnings are problems the install worked around, e.g. a route skipped for lack of a domain.
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 // Install instantiates a template version in a workspace: it validates inputs, provisions volumes,
@@ -552,6 +556,16 @@ func (s *Service) install(ctx context.Context, workspaceID uint, in InstallInput
 		}
 	}
 	report.phase(PhaseConfig, PhaseDone)
+
+	if len(m.Routes) > 0 {
+		report.phase(PhaseRoutes, PhaseActive)
+		result.Routes, result.Warnings = s.createRoutes(ctx, workspaceID, m, created, r, result.DisplayName, report)
+		if len(result.Warnings) > 0 {
+			report.phase(PhaseRoutes, PhaseWarning)
+		} else {
+			report.phase(PhaseRoutes, PhaseDone)
+		}
+	}
 
 	// The deploy phase stays active until the containers come online — StartInstall
 	// waits and completes it.
