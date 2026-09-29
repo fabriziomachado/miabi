@@ -803,16 +803,11 @@ func (s *Service) gatewayEnv(srv *models.Server, token, redisPassword string) []
 }
 
 // ensureNodeRedis deploys the per-node gateway Redis (remote edge nodes) on the
-// shared network, internal (no published ports) and password-protected. A no-op
-// when it is already running, so cached data survives a gateway redeploy.
+// shared network, internal (no published ports) and password-protected. A running
+// Redis started from the same spec is kept, so cached data survives a gateway
+// redeploy; one started with another password (the node was reinstalled and got a
+// new one) is recreated, or every gateway started with the new password is refused.
 func (s *Service) ensureNodeRedis(ctx context.Context, dc docker.Client, srv *models.Server, password string) error {
-	if cont, err := dc.InspectContainer(ctx, RedisContainer); err == nil && cont.State == "running" {
-		return nil
-	}
-	img := s.redisImg()
-	if err := dc.PullImage(ctx, img, nil); err != nil {
-		return fmt.Errorf("pull redis image %q: %w", img, err)
-	}
 	// Cache-only Redis: no persistence (gateway state is rate-limit counters +
 	// cache that can be safely rebuilt).
 	cmd := []string{"redis-server", "--save", "", "--appendonly", "no"}
@@ -821,14 +816,24 @@ func (s *Service) ensureNodeRedis(ctx context.Context, dc docker.Client, srv *mo
 	}
 	labels := s.labels(srv)
 	labels[docker.LabelRole] = docker.RoleNodeGatewayRedis
-	_ = dc.RemoveContainer(ctx, RedisContainer, true)
-	if _, err := dc.RunContainer(ctx, docker.RunSpec{
+	spec := docker.RunSpec{
 		Name:     RedisContainer,
-		Image:    img,
+		Image:    s.redisImg(),
 		Cmd:      cmd,
 		Networks: []string{s.network},
 		Labels:   labels,
-	}); err != nil {
+	}
+	want := hashSpec(spec)
+	if cont, err := dc.InspectContainer(ctx, RedisContainer); err == nil && cont.State == "running" &&
+		cont.Labels[docker.LabelSpecHash] == want {
+		return nil
+	}
+	spec.Labels[docker.LabelSpecHash] = want
+	if err := dc.PullImage(ctx, spec.Image, nil); err != nil {
+		return fmt.Errorf("pull redis image %q: %w", spec.Image, err)
+	}
+	_ = dc.RemoveContainer(ctx, RedisContainer, true)
+	if _, err := dc.RunContainer(ctx, spec); err != nil {
 		return fmt.Errorf("run redis container: %w", err)
 	}
 	return nil

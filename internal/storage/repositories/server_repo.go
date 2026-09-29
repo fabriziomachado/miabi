@@ -31,7 +31,19 @@ func (r *ServerRepository) CountWorkloads(serverID uint) (apps int64, databases 
 }
 
 func (r *ServerRepository) Create(s *models.Server) error { return r.db.Create(s).Error }
-func (r *ServerRepository) Update(s *models.Server) error { return r.db.Save(s).Error }
+
+func (r *ServerRepository) Update(s *models.Server) error {
+	return r.db.Omit("GatewayRedisPasswordEnc").Save(s).Error
+}
+
+func (r *ServerRepository) ClaimGatewayRedisPassword(id uint, enc string, replace bool) (bool, error) {
+	q := r.db.Model(&models.Server{}).Where("id = ?", id)
+	if !replace {
+		q = q.Where("gateway_redis_password_enc = '' OR gateway_redis_password_enc IS NULL")
+	}
+	res := q.UpdateColumn("gateway_redis_password_enc", enc)
+	return res.RowsAffected == 1, res.Error
+}
 func (r *ServerRepository) Delete(id uint) error {
 	return r.db.Delete(&models.Server{}, id).Error
 }
