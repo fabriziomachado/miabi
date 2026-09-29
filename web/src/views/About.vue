@@ -16,7 +16,7 @@ const copied = ref(false)
 const docsUrl = ((import.meta.env.VITE_API_URL as string) || '/api/v1').replace(/\/api\/v1\/?$/, '') + '/docs'
 const currentYear = new Date().getFullYear()
 
-// Edition badge: only meaningful once the license store has loaded (admins).
+// Edition badge: only meaningful once the license store has loaded.
 const edition = computed(() => (license.loaded ? license.edition : null))
 const editionLabel = computed(() => {
   switch (edition.value) {
@@ -51,7 +51,7 @@ async function load() {
   } catch {
     info.value = null
   }
-  if (auth.isAdmin) license.load().catch(() => {})
+  license.load().catch(() => {})
 }
 onMounted(load)
 

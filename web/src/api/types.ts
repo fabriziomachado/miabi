@@ -3082,6 +3082,14 @@ export interface LicenseEntitlements {
   grace_ends?: string | null
 }
 
+// UserEntitlements is the license subset any signed-in user can read: enough to gate EE features.
+export interface UserEntitlements {
+  edition: LicenseEdition
+  tier?: string
+  state: LicenseState
+  flags: Record<string, boolean>
+}
+
 export interface LicenseNodeUsage {
   used: number
   limit: number // -1 = unlimited
