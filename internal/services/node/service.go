@@ -684,6 +684,22 @@ func (s *Service) GatewayRedisPassword(id uint) (string, error) {
 	return pw, nil
 }
 
+// StoredGatewayRedisPassword returns the node's gateway Redis password without minting one
+func (s *Service) StoredGatewayRedisPassword(id uint) (string, error) {
+	srv, err := s.repo.FindByID(id)
+	if err != nil {
+		return "", ErrNodeNotFound
+	}
+	if srv.GatewayRedisPasswordEnc == "" {
+		return "", nil
+	}
+	pw, err := crypto.Decrypt(srv.GatewayRedisPasswordEnc)
+	if err != nil {
+		return "", nil
+	}
+	return pw, nil
+}
+
 // SetGatewayUpdate persists the node's in-flight gateway update progress (nil
 // clears it). Used by the safe-update flow so progress survives a reconnect.
 func (s *Service) SetGatewayUpdate(id uint, p *models.GatewayUpdateProgress) error {
