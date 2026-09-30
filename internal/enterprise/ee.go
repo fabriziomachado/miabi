@@ -57,6 +57,7 @@ const (
 	FlagOrganizations                = "organizations"     // more than one organization (tenant realm)
 	FlagSecurityPolicies             = "security_policies" // Security Center: scoped, audited platform security policies
 	FlagLiveMigration                = "live_migration"    // move an app, its volumes and databases to another location
+	FlagEEFeatures                   = "ee_features"
 )
 
 // FlagInfo describes one entitlement flag for tooling and documentation.
@@ -99,6 +100,7 @@ var AllFlags = []FlagInfo{
 	{FlagOrganizations, "organizations: tenant realms owning workspaces, with their own limits and clusters"},
 	{FlagSecurityPolicies, "Security Center: platform security policies with audit mode, scoped overrides and a decision log"},
 	{FlagLiveMigration, "live location migration: move an application with its volumes and databases to another location"},
+	{FlagEEFeatures, "baseline Enterprise features granted by every paid tier"},
 }
 
 const (
@@ -119,7 +121,7 @@ var Tiers = []Tier{
 	{
 		Name:  TierProfessional,
 		Desc:  "Freelancers & solo builders",
-		Flags: []string{FlagMultiSSO, FlagSSOHiddenProvider, FlagAuditLog, FlagRegistryS3, FlagStorageClasses, FlagRecoveryPoints},
+		Flags: []string{FlagMultiSSO, FlagSSOHiddenProvider, FlagAuditLog, FlagRegistryS3, FlagStorageClasses, FlagRecoveryPoints, FlagEEFeatures},
 		Limits: map[string]int{
 			LimitNodeLimit: 10,
 			LimitPlanLimit: 5,
@@ -134,7 +136,7 @@ var Tiers = []Tier{
 			FlagUserWorkspaceMembershipLimit,
 			FlagAuditLog, FlagAuditExport, FlagPlatformBackup, FlagAnnouncements,
 			FlagPrivateRegistry, FlagRegistryS3, FlagPlatformRunners, FlagSecurityProfile,
-			FlagStorageClasses, FlagRecoveryPoints, FlagOrganizations, FlagLiveMigration,
+			FlagStorageClasses, FlagRecoveryPoints, FlagOrganizations, FlagLiveMigration, FlagEEFeatures,
 		},
 		Limits: map[string]int{
 			LimitNodeLimit: 25,
