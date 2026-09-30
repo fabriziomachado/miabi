@@ -27,7 +27,29 @@
     "miabi": "Miabi",
     "resources": "Resources",
     "tagline": "The open-source, self-hosted PaaS for shipping apps, not infrastructure.",
-    "version": "Version"
+    "version": "Version",
+    "components": "Components",
+    "componentsHint": "Parts of Miabi that are versioned on their own.",
+    "col": {
+      "component": "Component",
+      "version": "Version",
+      "stability": "Stability",
+      "format": "Format",
+      "status": "Status"
+    },
+    "stability": {
+      "preview": "Preview",
+      "beta": "Beta",
+      "stable": "Stable"
+    },
+    "status": {
+      "on": "On",
+      "off": "Off",
+      "enterprise": "Enterprise"
+    },
+    "catalog": "{n} templates · synced {when}",
+    "catalogNotSynced": "Catalog not synced yet",
+    "changes": "Changes"
   },
   "action": {
     "apply": "Apply",
@@ -3594,7 +3616,13 @@
       "collapse": "Collapse sidebar",
       "expand": "Expand sidebar"
     },
-    "theme": "Theme"
+    "theme": "Theme",
+    "update": {
+      "title": "Miabi was updated",
+      "body": "Reload to use the new version of the web app.",
+      "reload": "Reload",
+      "dismiss": "Later"
+    }
   },
   "shellTerminal": {
     "compact": "Compact",

@@ -8,6 +8,21 @@ export interface ApiResponse<T> {
   error?: { status_code?: number; code: string; message: string; error?: string }
 }
 
+export type ComponentStability = 'preview' | 'beta' | 'stable'
+export type ComponentStatus = 'on' | 'off' | 'enterprise'
+
+// ComponentInfo is one independently versioned part of Miabi, shown on the About page.
+export interface ComponentInfo {
+  id: string
+  name: string
+  version: string
+  stability: ComponentStability
+  format_version?: string
+  status: ComponentStatus
+  catalog?: { templates: number; synced_at?: string; generated_at?: string }
+  changelog_url: string
+}
+
 export interface AppInfo {
   name: string
   version: string

@@ -5,6 +5,7 @@ package remote
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,8 @@ type Store struct {
 	activeURL string
 	denied    bool
 	etag      string
+	syncedAt  time.Time // last successful live sync, 304 included; zero before one
+	generated string    // the bundle's generatedAt
 	templates []DecodedTemplate
 	index     map[string]*DecodedTemplate // name -> template
 }
@@ -160,11 +163,13 @@ func (s *Store) Sync(ctx context.Context) error {
 		return err
 	}
 	if notModified {
+		s.markSynced()
 		return nil
 	}
 	if err := s.set(data, newETag); err != nil {
 		return err
 	}
+	s.markSynced()
 	if s.cache != nil {
 		if err := s.cache.Save(ctx, source, data, newETag, s.ttl); err != nil {
 			logger.Warn("marketplace: failed to cache bundle", "error", err)
@@ -183,10 +188,28 @@ func (s *Store) set(data []byte, etag string) error {
 	for i := range tpls {
 		idx[tpls[i].Name] = &tpls[i]
 	}
+	var meta struct {
+		GeneratedAt string `json:"generatedAt"`
+	}
+	_ = json.Unmarshal(data, &meta)
 	s.mu.Lock()
-	s.templates, s.index, s.etag = tpls, idx, etag
+	s.templates, s.index, s.etag, s.generated = tpls, idx, etag, meta.GeneratedAt
 	s.mu.Unlock()
 	return nil
+}
+
+func (s *Store) markSynced() {
+	s.mu.Lock()
+	s.syncedAt = time.Now()
+	s.mu.Unlock()
+}
+
+// CatalogInfo reports the synced catalog's template count, its last successful live sync (zero
+// before one) and the marketplace's generatedAt.
+func (s *Store) CatalogInfo() (templates int, syncedAt time.Time, generatedAt string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.templates), s.syncedAt, s.generated
 }
 
 // Templates returns the decoded synced templates (official + community).

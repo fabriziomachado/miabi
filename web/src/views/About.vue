@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { infoApi } from '@/api/info'
 import { copyText } from '@/utils/clipboard'
-import type { AppInfo } from '@/api/types'
+import type { AppInfo, ComponentInfo } from '@/api/types'
+import { relativeTime } from '@/utils/time'
 import { useAuthStore } from '@/stores/auth'
 import { useLicenseStore } from '@/stores/license'
 import MiabiWordmark from '@/components/MiabiWordmark.vue'
@@ -11,6 +12,7 @@ const auth = useAuthStore()
 const license = useLicenseStore()
 
 const info = ref<AppInfo | null>(null)
+const components = ref<ComponentInfo[]>([])
 const copied = ref(false)
 
 const docsUrl = ((import.meta.env.VITE_API_URL as string) || '/api/v1').replace(/\/api\/v1\/?$/, '') + '/docs'
@@ -51,6 +53,7 @@ async function load() {
   } catch {
     info.value = null
   }
+  infoApi.components().then((res) => { components.value = res.data.data }).catch(() => {})
   license.load().catch(() => {})
 }
 onMounted(load)
@@ -127,6 +130,49 @@ function copyVersion() {
         <div class="card-body">
           <p class="prose">{{ $t('about.intro') }}</p>
           <p class="prose">{{ $t('about.capabilities') }}</p>
+        </div>
+      </div>
+
+      <!-- Components -->
+      <div v-if="components.length" class="card components-card">
+        <div class="card-header">
+          <h2>{{ $t('about.components') }}</h2>
+          <span class="text-muted text-sm">{{ $t('about.componentsHint') }}</span>
+        </div>
+        <div class="card-body table-wrap">
+          <table class="components">
+            <thead>
+              <tr>
+                <th>{{ $t('about.col.component') }}</th>
+                <th>{{ $t('about.col.version') }}</th>
+                <th>{{ $t('about.col.stability') }}</th>
+                <th>{{ $t('about.col.format') }}</th>
+                <th>{{ $t('about.col.status') }}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in components" :key="c.id">
+                <td>
+                  <div class="comp-name">{{ c.name }}</div>
+                  <div v-if="c.catalog" class="text-muted text-xs">
+                    {{ c.catalog.synced_at
+                      ? $t('about.catalog', { n: c.catalog.templates, when: relativeTime(c.catalog.synced_at) })
+                      : $t('about.catalogNotSynced') }}
+                  </div>
+                </td>
+                <td class="mono">{{ c.version }}</td>
+                <td><span class="badge" :class="`stab-${c.stability}`">{{ $t(`about.stability.${c.stability}`) }}</span></td>
+                <td class="mono text-muted">{{ c.format_version || '—' }}</td>
+                <td><span class="status" :class="`st-${c.status}`">{{ $t(`about.status.${c.status}`) }}</span></td>
+                <td class="right">
+                  <a :href="c.changelog_url" target="_blank" rel="noopener noreferrer" class="changes-link">
+                    {{ $t('about.changes') }} <span class="mdi mdi-open-in-new"></span>
+                  </a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -272,9 +318,34 @@ function copyVersion() {
   font-size: 13px;
   color: var(--text-muted);
 }
-.ecosystem-card {
+.ecosystem-card,
+.components-card {
   grid-column: 1 / -1;
 }
+.components-card .card-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.table-wrap { overflow-x: auto; }
+.components { width: 100%; border-collapse: collapse; font-size: 14px; }
+.components th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 0 12px 10px 0;
+}
+.components td { padding: 10px 12px 10px 0; border-top: 1px solid var(--border-primary); vertical-align: middle; }
+.components .right { text-align: right; padding-right: 0; }
+.comp-name { font-weight: 600; }
+.text-xs { font-size: 12px; }
+.stab-stable { background: var(--success-50); color: var(--success-600); }
+.stab-beta { background: var(--warning-50); color: var(--warning-600); }
+.stab-preview { background: var(--bg-tertiary); color: var(--text-secondary); }
+.status::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; background: currentColor; }
+.st-on { color: var(--success-600); }
+.st-off { color: var(--text-muted); }
+.st-enterprise { color: var(--primary-500); }
+.changes-link { font-size: 13px; white-space: nowrap; }
 .ecosystem {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

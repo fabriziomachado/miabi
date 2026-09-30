@@ -14,6 +14,7 @@ import { type NavItem, type NavSection } from '@/data/nav'
 import { label } from '@/i18n'
 import { useI18n } from 'vue-i18n'
 import { infoApi } from '@/api/info'
+import { useUpdateNotice } from '@/composables/useUpdateNotice'
 import { ADMIN_HOME } from '@/data/console'
 
 // The frame both consoles share. What differs is the navigation it is handed and
@@ -132,6 +133,8 @@ function onPaletteShortcut(event: KeyboardEvent) {
   event.preventDefault()
   paletteOpen.value = !paletteOpen.value
 }
+
+const update = useUpdateNotice()
 
 onMounted(() => {
   document.addEventListener('click', closeMenus)
@@ -277,6 +280,12 @@ onBeforeUnmount(() => {
       </header>
 
       <main class="main-content">
+        <div v-if="update.available.value && !update.dismissed.value" class="update-banner" role="status">
+          <span class="mdi mdi-update"></span>
+          <div class="update-text"><strong>{{ $t('shell.update.title') }}</strong> {{ $t('shell.update.body') }}</div>
+          <button class="btn btn-primary btn-sm" @click="update.reload">{{ $t('shell.update.reload') }}</button>
+          <button class="btn btn-ghost btn-sm" @click="update.dismiss">{{ $t('shell.update.dismiss') }}</button>
+        </div>
         <slot name="banners" />
         <slot />
       </main>
@@ -1225,4 +1234,17 @@ onBeforeUnmount(() => {
     display: none;
   }
 }
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--primary-50);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.update-banner .mdi { font-size: 18px; color: var(--primary-500); }
+.update-text { flex: 1; min-width: 0; }
 </style>
