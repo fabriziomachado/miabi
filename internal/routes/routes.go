@@ -14,6 +14,7 @@ import (
 
 	"github.com/jkaninda/logger"
 	"github.com/jkaninda/okapi"
+	"github.com/miabi-io/miabi/internal/components"
 	"github.com/miabi-io/miabi/internal/config"
 	cronpkg "github.com/miabi-io/miabi/internal/cron"
 	"github.com/miabi-io/miabi/internal/docker"
@@ -222,6 +223,7 @@ type routerHandlers struct {
 	oauthAdmin          *handlers.OAuthAdminHandler
 	oauthPublic         *handlers.OAuthHandler
 	license             *handlers.LicenseHandler
+	components          *handlers.ComponentHandler
 	adminOrganization   *handlers.AdminOrganizationHandler
 	ssoAdmin            *handlers.SSOAdminHandler
 	ldapAdmin           *handlers.LDAPAdminHandler
@@ -1341,8 +1343,24 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 			adminPlatformBackup: handlers.NewAdminPlatformBackupHandler(platformBackupService, ee, auditLogger),
 			adminRegistry:       handlers.NewAdminRegistryHandler(registryServerService, ee, auditLogger),
 			registryServer:      handlers.NewRegistryServerHandler(registryServerService, workspaceRepo),
-			oauthAdmin:          handlers.NewOAuthAdminHandler(oauthRepo, oauthService, ee, auditLogger),
-			oauthPublic:         handlers.NewOAuthHandler(oauthService, oauthRepo, authService, sessionRepo, auditLogger, cfg),
+			components: handlers.NewComponentHandler(components.NewService(components.Probes{
+				RegistryEnabled: func() bool {
+					st, err := registryServerService.Get()
+					return err == nil && st.Enabled && registryServerService.HostFor(st) != ""
+				},
+				StorageClassesLicensed: func() bool { return ee.Has(enterprise.FlagStorageClasses) },
+				AnalyticsEnabled:       func() bool { return cfg.AnalyticsEnabled },
+				Catalog: func() components.Catalog {
+					n, synced, generated := marketplaceRemote.CatalogInfo()
+					c := components.Catalog{Templates: n, GeneratedAt: generated}
+					if !synced.IsZero() {
+						c.SyncedAt = &synced
+					}
+					return c
+				},
+			})),
+			oauthAdmin:  handlers.NewOAuthAdminHandler(oauthRepo, oauthService, ee, auditLogger),
+			oauthPublic: handlers.NewOAuthHandler(oauthService, oauthRepo, authService, sessionRepo, auditLogger, cfg),
 			license: handlers.NewLicenseHandler(ee, licenseNodeCount, func() int64 { n, _ := planRepo.Count(); return n }, func() int64 { n, _ := storageClassService.Count(); return n },
 				func() int64 { n, _ := repositories.NewRunnerRepository(db).CountShared(); return n },
 				installID, auditLogger),
@@ -1649,6 +1667,7 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 	r.register(r.middlewareRoutes()...)
 	r.register(r.portBindingRoutes()...)
 	r.register(r.capabilityRoutes()...)
+	r.register(r.componentRoutes()...)
 	r.register(r.databaseRoutes()...)
 	r.register(r.volumeRoutes()...)
 	r.register(r.volumeBackupRoutes()...)

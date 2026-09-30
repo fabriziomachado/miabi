@@ -149,6 +149,20 @@ jobs:
           # single-node swarm on it.
           MIABI_TEST_SWARM: "1"
 
+  component-versions:
+    name: Component versions
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Warn-only: a component whose code changed without a version bump gets an annotation.
+      - name: Check component versions
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: scripts/components/check-component-versions.sh
+
   web:
     name: Web UI
     runs-on: ubuntu-latest

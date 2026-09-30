@@ -27,7 +27,29 @@
     "miabi": "Miabi",
     "resources": "Ressources",
     "tagline": "Le PaaS open source et auto-hébergé pour livrer des applications, pas de l’infrastructure.",
-    "version": "Version"
+    "version": "Version",
+    "components": "Composants",
+    "componentsHint": "Les parties de Miabi versionnées séparément.",
+    "col": {
+      "component": "Composant",
+      "version": "Version",
+      "stability": "Stabilité",
+      "format": "Format",
+      "status": "État"
+    },
+    "stability": {
+      "preview": "Aperçu",
+      "beta": "Bêta",
+      "stable": "Stable"
+    },
+    "status": {
+      "on": "Activé",
+      "off": "Désactivé",
+      "enterprise": "Enterprise"
+    },
+    "catalog": "{n} modèles · synchronisé {when}",
+    "catalogNotSynced": "Catalogue pas encore synchronisé",
+    "changes": "Modifications"
   },
   "action": {
     "apply": "Appliquer",
@@ -3594,7 +3616,13 @@
       "collapse": "Replier la barre latérale",
       "expand": "Déplier la barre latérale"
     },
-    "theme": "Thème"
+    "theme": "Thème",
+    "update": {
+      "title": "Miabi a été mis à jour",
+      "body": "Rechargez pour utiliser la nouvelle version de l'application web.",
+      "reload": "Recharger",
+      "dismiss": "Plus tard"
+    }
   },
   "shellTerminal": {
     "compact": "Compact",
