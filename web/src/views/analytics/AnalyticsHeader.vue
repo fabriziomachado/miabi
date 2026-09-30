@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import BetaBadge from '@/components/BetaBadge.vue'
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
@@ -92,7 +93,7 @@ function onAppChange(e: Event) {
   <div class="a-header">
     <div class="a-topline">
       <div class="a-title">
-        <h1>{{ $t('analytics.analytics') }}</h1>
+        <h1>{{ $t('analytics.analytics') }}<BetaBadge component="analytics" /></h1>
         <span class="a-ns">{{ ws.contextLabel }}</span>
         <span v-if="rangeWindow" class="a-window" :title="`All times shown in your local timezone (${tz})`">
           <span class="mdi mdi-clock-outline"></span> {{ rangeWindow }}

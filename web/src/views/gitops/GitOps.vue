@@ -260,7 +260,7 @@ function syncedTitle(s: GitSource) {
               </td>
               <td>
                 <span class="badge" :class="statusMeta[s.status].badge">
-                  <span class="mdi" :class="statusMeta[s.status].icon"></span> {{ statusMeta[s.status].label }}
+                  <span class="mdi" :class="statusMeta[s.status].icon"></span> {{ t(statusMeta[s.status].label) }}
                 </span>
                 <div v-if="s.status === 'error' && s.message" class="cell-sub err">{{ s.message }}</div>
               </td>
@@ -298,7 +298,7 @@ function syncedTitle(s: GitSource) {
             <span class="cell-sub" :title="s.repo_url">{{ s.repo_url }}</span>
           </span>
           <span class="badge gc-status" :class="statusMeta[s.status].badge">
-            <span class="mdi" :class="statusMeta[s.status].icon"></span> {{ statusMeta[s.status].label }}
+            <span class="mdi" :class="statusMeta[s.status].icon"></span> {{ t(statusMeta[s.status].label) }}
           </span>
         </div>
         <div v-if="s.status === 'error' && s.message" class="cell-sub err">{{ s.message }}</div>

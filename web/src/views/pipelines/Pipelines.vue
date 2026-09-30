@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BetaBanner from '@/components/BetaBanner.vue'
+import BetaBadge from '@/components/BetaBadge.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
@@ -258,12 +260,13 @@ function openLastRun(p: PipelineDefinition) {
   <div>
     <div class="page-header">
       <div>
-        <h1>{{ $t('pipelines.pipelines') }}</h1>
+        <h1>{{ $t('pipelines.pipelines') }}<BetaBadge component="pipeline" /></h1>
         <i18n-t keypath="pipelines.subtitle" tag="p" class="subtitle"><template #kind><code>kind: Pipeline</code></template></i18n-t>
       </div>
       <button v-if="ws.canEdit" class="btn btn-primary" @click="openCreate">
         <span class="mdi mdi-plus"></span>{{ $t('pipelines.newPipeline') }}</button>
     </div>
+    <BetaBanner component="pipeline" />
 
     <div class="card">
       <div v-if="loading && items.length === 0" class="card-body"><span class="spinner"></span></div>

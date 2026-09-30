@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { infoApi } from '@/api/info'
 import { copyText } from '@/utils/clipboard'
-import type { AppInfo, ComponentInfo } from '@/api/types'
+import type { AppInfo } from '@/api/types'
+import { useComponents } from '@/composables/useComponents'
 import { relativeTime } from '@/utils/time'
 import { useAuthStore } from '@/stores/auth'
 import { useLicenseStore } from '@/stores/license'
@@ -12,7 +13,7 @@ const auth = useAuthStore()
 const license = useLicenseStore()
 
 const info = ref<AppInfo | null>(null)
-const components = ref<ComponentInfo[]>([])
+const { components } = useComponents()
 const copied = ref(false)
 
 const docsUrl = ((import.meta.env.VITE_API_URL as string) || '/api/v1').replace(/\/api\/v1\/?$/, '') + '/docs'
@@ -53,7 +54,6 @@ async function load() {
   } catch {
     info.value = null
   }
-  infoApi.components().then((res) => { components.value = res.data.data }).catch(() => {})
   license.load().catch(() => {})
 }
 onMounted(load)
