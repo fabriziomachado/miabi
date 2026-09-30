@@ -209,6 +209,7 @@ const FEATURE_LABELS: Record<string, string> = {
   organizations: 'Multiple organizations',
   security_policies: 'Security Center policies',
   live_migration: 'Live migration',
+  ee_features: 'Enterprise features',
 }
 
 function featureLabel(flag: string): string {
