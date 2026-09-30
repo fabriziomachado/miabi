@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import BetaBanner from '@/components/BetaBanner.vue'
+import BetaBadge from '@/components/BetaBadge.vue'
 import { computed, onMounted, ref } from 'vue'
 import { adminApi } from '@/api/admin'
 import { nodesApi } from '@/api/nodes'
@@ -132,7 +134,7 @@ const reclaimHint = computed(() =>
   <div>
     <div class="page-header">
       <div>
-        <h1>Storage classes</h1>
+        <h1>Storage classes<BetaBadge component="storage-classes" /></h1>
         <p class="cell-sub">
           Where on a node the platform creates volumes. Workspaces choose a class by name — they never see or supply a host path.
         </p>
@@ -151,6 +153,7 @@ const reclaimHint = computed(() =>
         </button>
       </div>
     </div>
+    <BetaBanner component="storage-classes" />
 
     <div v-if="atCap" class="cap-note">
       <span class="mdi mdi-lock-outline"></span>
