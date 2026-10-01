@@ -30,6 +30,11 @@ COPY . .
 # Stage the built UI where the embed directive (internal/web) picks it up, so the
 # binary is self-contained.
 COPY --from=web /web/dist ./internal/web/dist
+# The HTTP healthcheck probe copied into app containers (internal/healthprobe).
+RUN for arch in amd64 arm64; do \
+      CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath -ldflags "-s -w" \
+        -o internal/healthprobe/bin/healthprobe-linux-$arch ./cmd/healthprobe; \
+    done
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown

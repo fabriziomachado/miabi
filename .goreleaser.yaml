@@ -19,6 +19,8 @@ before:
     - npm --prefix web run build
     - rm -rf internal/web/dist
     - cp -r web/dist internal/web/dist
+    # The HTTP healthcheck probe copied into app containers (internal/healthprobe).
+    - make build-probe
 
 builds:
   - id: miabi

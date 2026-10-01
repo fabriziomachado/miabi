@@ -37,8 +37,13 @@ func TestBuildHealthcheck(t *testing.T) {
 	if http == nil || len(http.Test) != 2 || http.Test[0] != "CMD-SHELL" {
 		t.Fatalf("unexpected http healthcheck: %+v", http)
 	}
-	if !strings.Contains(http.Test[1], "http://localhost:3000/healthz") {
+	if !strings.Contains(http.Test[1], "'http://127.0.0.1:3000/healthz'") {
 		t.Errorf("http test missing url: %s", http.Test[1])
+	}
+	for _, tool := range []string{"curl", "wget", "bash"} {
+		if !strings.Contains(http.Test[1], "command -v "+tool) {
+			t.Errorf("http test should fall back to %s: %s", tool, http.Test[1])
+		}
 	}
 
 	cmd := buildHealthcheck(&models.Application{HealthcheckType: models.HealthcheckCommand, HealthcheckCommand: "pg_isready"})

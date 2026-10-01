@@ -10,11 +10,12 @@ MIABI_LDFLAGS := $(LDFLAGS) -X $(PKG)/internal/enterprise.embeddedPublicKey=$(LI
 
 WEB_DIR := web
 EMBED_WEB_DIR := internal/web/dist
+PROBE_DIR := internal/healthprobe/bin
 
 SCHEMA_FILE ?= miabi.io-v1.schema.json
 INSTALL_SCHEMA_FILE ?= install.miabi.io-v1.schema.json
 
-.PHONY: run worker build build-ui build-all dev-ui test lint tidy migrate schema docker docker-rootless compose-up compose-down mwdocs
+.PHONY: run worker build build-probe build-ui build-all dev-ui test lint tidy migrate schema docker docker-rootless compose-up compose-down mwdocs
 
 run: ## Run the API server
 	go run -tags enterprise -ldflags "$(MIABI_LDFLAGS)" ./cmd/miabi server
@@ -22,8 +23,14 @@ run: ## Run the API server
 worker: ## Run the background worker
 	go run -tags enterprise -ldflags "$(MIABI_LDFLAGS)" ./cmd/miabi worker
 
-build: ## Build the control-plane binary
+build: build-probe ## Build the control-plane binary
 	go build -tags enterprise -ldflags "$(MIABI_LDFLAGS)" -o bin/$(BINARY) ./cmd/miabi
+
+build-probe: ## Build the static HTTP healthcheck probe embedded for app containers
+	for arch in amd64 arm64; do \
+		CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags "-s -w" \
+			-o $(PROBE_DIR)/healthprobe-linux-$$arch ./cmd/healthprobe || exit 1; \
+	done
 
 build-ui: ## Build the web UI (Vue) and stage it for embedding (internal/web/dist)
 	npm --prefix $(WEB_DIR) ci
