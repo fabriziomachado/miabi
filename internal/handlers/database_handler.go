@@ -540,7 +540,7 @@ func (h *DatabaseHandler) DeleteDatabase(c *okapi.Context) error {
 // ListByApp lists the logical databases attached to an application.
 func (h *DatabaseHandler) ListByApp(c *okapi.Context) error {
 	wsID := middlewares.WorkspaceID(c)
-	appID, err := strconv.Atoi(c.Param("appID"))
+	appID, err := appParamInt(c)
 	if err != nil || appID <= 0 {
 		return c.AbortBadRequest("invalid app id")
 	}
@@ -555,7 +555,7 @@ func (h *DatabaseHandler) ListByApp(c *okapi.Context) error {
 // the app's own scoped credentials, not the instance admin credentials.
 func (h *DatabaseHandler) AppDatabaseConnection(c *okapi.Context) error {
 	wsID := middlewares.WorkspaceID(c)
-	appID, err := strconv.Atoi(c.Param("appID"))
+	appID, err := appParamInt(c)
 	if err != nil || appID <= 0 {
 		return c.AbortBadRequest("invalid app id")
 	}
@@ -581,7 +581,7 @@ type AttachDatabaseRequest struct {
 // already owned by a different app.
 func (h *DatabaseHandler) AttachToApp(c *okapi.Context, req *AttachDatabaseRequest) error {
 	wsID := middlewares.WorkspaceID(c)
-	appID, err := strconv.Atoi(c.Param("appID"))
+	appID, err := appParamInt(c)
 	if err != nil || appID <= 0 {
 		return c.AbortBadRequest("invalid app id")
 	}
@@ -619,7 +619,7 @@ func (h *DatabaseHandler) AttachToApp(c *okapi.Context, req *AttachDatabaseReque
 // vars its attachment injected.
 func (h *DatabaseHandler) DetachFromApp(c *okapi.Context) error {
 	wsID := middlewares.WorkspaceID(c)
-	appID, err := strconv.Atoi(c.Param("appID"))
+	appID, err := appParamInt(c)
 	if err != nil || appID <= 0 {
 		return c.AbortBadRequest("invalid app id")
 	}

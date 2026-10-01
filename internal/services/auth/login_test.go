@@ -76,3 +76,24 @@ func TestAuthenticateByEmailOrUsername(t *testing.T) {
 		})
 	}
 }
+
+func TestServiceAccountCannotSignIn(t *testing.T) {
+	s := authTestService(t)
+	hash, _ := bcrypt.GenerateFromPassword([]byte("s3cret-pass"), bcrypt.DefaultCost)
+	ws := uint(1)
+	sa := models.User{Name: "CI", Username: "sa-ci", Email: "sa-ci@" + models.ServiceAccountEmailDomain, PasswordHash: string(hash),
+		Role: models.SystemRoleUser, Active: true, Kind: models.UserKindService, ServiceWorkspaceID: &ws}
+	if err := s.users.Create(&sa); err != nil {
+		t.Fatal(err)
+	}
+	// A matching password must still be refused: the kind decides, not the hash.
+	if _, err := s.Authenticate("sa-ci", "s3cret-pass"); !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("Authenticate = %v, want ErrInvalidCredentials", err)
+	}
+	if tok, _, err := s.IssueToken(&sa); !errors.Is(err, ErrServiceAccountSession) || tok != "" {
+		t.Fatalf("IssueToken = %q, %v", tok, err)
+	}
+	if raw, _, err := s.CreatePasswordReset(sa.Email); raw != "" || err != nil {
+		t.Fatalf("CreatePasswordReset = %q, %v", raw, err)
+	}
+}

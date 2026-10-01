@@ -327,6 +327,11 @@ func (r *WorkspaceRepository) RemoveMember(workspaceID, userID uint) error {
 		Delete(&models.WorkspaceMember{}).Error
 }
 
+// RemoveAllMemberships drops a user from every workspace.
+func (r *WorkspaceRepository) RemoveAllMemberships(userID uint) error {
+	return r.db.Where("user_id = ?", userID).Delete(&models.WorkspaceMember{}).Error
+}
+
 func (r *WorkspaceRepository) CountOwners(workspaceID uint) (int64, error) {
 	var count int64
 	err := r.db.Model(&models.WorkspaceMember{}).

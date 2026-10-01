@@ -215,6 +215,8 @@ type Pipelines interface {
 	TriggerForApp(app *models.Application, trigger string, userID *uint, noCache bool) (*models.PipelineRun, error)
 	// DeleteForApp drops the app's repo-owned pipelines and unbinds the rest.
 	DeleteForApp(workspaceID, appID uint) error
+	// GetRun loads a pipeline run of the workspace.
+	GetRun(workspaceID, id uint) (*models.PipelineRun, error)
 	// SyncFromRepo re-reads a repo-owned pipeline's spec from its repository, reporting whether
 	// the stored spec changed. An empty ref uses the pipeline's tracked one.
 	SyncFromRepo(ctx context.Context, p *models.PipelineDefinition, ref string) (bool, error)
@@ -2616,6 +2618,14 @@ func (s *Service) ListDeployments(appID uint, limit int) ([]models.DeploymentWit
 
 func (s *Service) GetDeployment(id uint) (*models.Deployment, error) {
 	return s.deployments.FindByID(id)
+}
+
+// GetPipelineRun loads a pipeline run (for waiting on a pipeline-backed deploy).
+func (s *Service) GetPipelineRun(workspaceID, id uint) (*models.PipelineRun, error) {
+	if s.pipelines == nil {
+		return nil, ErrPipelinesUnavailable
+	}
+	return s.pipelines.GetRun(workspaceID, id)
 }
 
 func (s *Service) ListReleases(appID uint) ([]models.Release, error) {

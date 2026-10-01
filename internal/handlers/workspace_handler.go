@@ -446,6 +446,8 @@ func (h *WorkspaceHandler) mapWorkspaceErr(c *okapi.Context, err error) error {
 		return c.AbortBadRequest("invalid or expired invitation")
 	case errors.Is(err, workspace.ErrInvalidRole):
 		return c.AbortBadRequest("invalid role")
+	case errors.Is(err, workspace.ErrServiceAccountOwner):
+		return c.AbortBadRequest(err.Error())
 	case errors.Is(err, workspace.ErrOutranked), errors.Is(err, workspace.ErrRoleAboveSelf):
 		return c.AbortForbidden(err.Error(), err)
 	default:

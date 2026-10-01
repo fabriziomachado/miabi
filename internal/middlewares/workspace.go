@@ -16,7 +16,7 @@ import (
 // WorkspaceScope resolves the workspace from the {workspace} path parameter, verifies the
 // authenticated user is a member, and stores the workspace id and role in the context. The
 // parameter resolves by shape: all-digits is an id, a uuid is a uid, otherwise the handle.
-func WorkspaceScope(repo *repositories.WorkspaceRepository, customRoles *repositories.CustomRoleRepository) okapi.Middleware {
+func WorkspaceScope(repo *repositories.WorkspaceRepository, customRoles *repositories.CustomRoleRepository, apps ...AppRefResolver) okapi.Middleware {
 	return func(c *okapi.Context) error {
 		userID := UserID(c)
 		if userID == 0 {
@@ -65,6 +65,15 @@ func WorkspaceScope(repo *repositories.WorkspaceRepository, customRoles *reposit
 		c.Set(CtxWorkspaceID, wsID)
 		c.Set(CtxWorkspaceRole, string(role))
 		c.Set(CtxPermissions, perms)
+		// An {appID} may be an id, a uid or the app's name: resolve it once, here, so every handler
+		// and permission check sees the same numeric id.
+		if ref := strings.TrimSpace(c.Param("appID")); ref != "" && len(apps) > 0 && apps[0] != nil {
+			id, err := apps[0].IDByRef(uint(wsID), ref)
+			if err != nil {
+				return c.AbortNotFound("application not found")
+			}
+			c.Set(CtxAppID, int(id))
+		}
 		return c.Next()
 	}
 }
@@ -102,7 +111,13 @@ func RequireResourcePermission(p models.Permission, resourceType, paramName stri
 			return c.Next()
 		}
 		if policies != nil {
-			if id, err := strconv.Atoi(c.Param(paramName)); err == nil && id > 0 {
+			id, err := strconv.Atoi(c.Param(paramName))
+			if paramName == "appID" {
+				if resolved := AppID(c); resolved != 0 {
+					id, err = int(resolved), nil
+				}
+			}
+			if err == nil && id > 0 {
 				if policies.HasPermission(WorkspaceID(c), UserID(c), resourceType, uint(id), p) {
 					return c.Next()
 				}
@@ -127,6 +142,11 @@ func Permissions(c *okapi.Context) map[models.Permission]bool {
 // WorkspaceID returns the resolved workspace id (0 if absent).
 func WorkspaceID(c *okapi.Context) uint {
 	return uint(c.GetInt(CtxWorkspaceID))
+}
+
+// AppID returns the app resolved from the {appID} path parameter by WorkspaceScope, or 0.
+func AppID(c *okapi.Context) uint {
+	return uint(c.GetInt(CtxAppID))
 }
 
 // WorkspaceRole returns the caller's role in the resolved workspace.

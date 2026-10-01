@@ -143,3 +143,20 @@ func TestParseScopeMode(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveScopeMode(t *testing.T) {
+	cases := []struct {
+		configured, legacy string
+		want               ScopeMode
+	}{
+		{"", "", ScopeModeEnforce},
+		{"", "warn", ScopeModeWarn},
+		{"enforce", "warn", ScopeModeEnforce},
+		{"off", "", ScopeModeOff},
+	}
+	for _, tc := range cases {
+		if got, _ := ResolveScopeMode(tc.configured, tc.legacy); got != tc.want {
+			t.Errorf("ResolveScopeMode(%q, %q) = %q, want %q", tc.configured, tc.legacy, got, tc.want)
+		}
+	}
+}

@@ -183,13 +183,15 @@ func (s *Service) authorizePrincipal(key *models.APIKey, workspaceID uint, repo 
 	if reason := s.authorizeBoundApp(key, repo); reason != "" {
 		return reason
 	}
-	if key.WorkspaceID != nil {
-		if *key.WorkspaceID != workspaceID {
-			return "token is scoped to a different workspace"
-		}
+	if key.WorkspaceID != nil && *key.WorkspaceID != workspaceID {
+		return "token is scoped to a different workspace"
+	}
+	// Machine-minted job credentials are app-bound and short-lived; their subject may be no user.
+	if key.Ephemeral && key.WorkspaceID != nil {
 		return ""
 	}
-	// An account-wide (user) token is authorized by the owner's membership.
+	// A user's token, account-wide or workspace-bound, is authorized by the owner's current
+	// membership: removing someone from a workspace must cut off their tokens there too.
 	member, err := s.ws.FindMember(workspaceID, key.UserID)
 	if err != nil {
 		return "you are not a member of this workspace"
@@ -231,10 +233,12 @@ func repoTail(repo string) string {
 // general write/deploy scope OR the dedicated registry_write; a pull needs read
 // OR registry_read. (HasScope already covers "*".)
 func scopeAllows(key *models.APIKey, push bool) bool {
+	// The general scopes follow the API's ladder, so admin and * keys work here too.
 	if push {
-		return key.HasScope(models.ScopeWrite) || key.HasScope(models.ScopeDeploy) || key.HasScope(models.ScopeRegistryWrite)
+		return models.ScopeSatisfies(key.Scopes, models.ScopeWrite) || models.ScopeSatisfies(key.Scopes, models.ScopeDeploy) ||
+			key.HasScope(models.ScopeRegistryWrite)
 	}
-	return key.HasScope(models.ScopeRead) || key.HasScope(models.ScopeRegistryRead)
+	return models.ScopeSatisfies(key.Scopes, models.ScopeRead) || key.HasScope(models.ScopeRegistryRead)
 }
 
 // roleAllows maps the action to the required workspace role: any member may

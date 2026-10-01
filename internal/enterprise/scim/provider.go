@@ -167,10 +167,10 @@ func (p *Provider) listUsers(c *okapi.Context) error {
 	var users []models.User
 	if f := c.Query("filter"); f != "" {
 		if email := parseUserNameFilter(f); email != "" {
-			p.db.Where("email = ?", email).Find(&users)
+			p.humans().Where("email = ?", email).Find(&users)
 		}
 	} else {
-		p.db.Limit(200).Find(&users)
+		p.humans().Limit(200).Find(&users)
 	}
 	res := make([]scimUser, 0, len(users))
 	for i := range users {
@@ -198,7 +198,7 @@ func (p *Provider) createUser(c *okapi.Context) error {
 	}
 	// Idempotent: if the user already exists, return it (200) rather than erroring.
 	var existing models.User
-	if err := p.db.Where("email = ?", email).First(&existing).Error; err == nil {
+	if err := p.humans().Where("email = ?", email).First(&existing).Error; err == nil {
 		return c.JSON(http.StatusOK, toSCIM(&existing))
 	}
 	now := time.Now()
@@ -302,10 +302,15 @@ func (p *Provider) find(id string) (*models.User, error) {
 		return nil, err
 	}
 	var u models.User
-	if err := p.db.First(&u, uint(n)).Error; err != nil {
+	if err := p.humans().First(&u, uint(n)).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
+}
+
+// humans hides service accounts: they belong to a workspace, not to the identity provider.
+func (p *Provider) humans() *gorm.DB {
+	return p.db.Where("kind <> ?", models.UserKindService)
 }
 
 func listResponse(res []scimUser) map[string]any {

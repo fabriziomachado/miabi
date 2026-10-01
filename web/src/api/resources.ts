@@ -1,7 +1,7 @@
 import api, { sseUrl } from './client'
 import type {
   ApiResponse, DatabaseInstance, DatabaseSizeOffer, DBLiveStatus, LogicalDatabase, ConnectionInfo, ForwardSession, DBEngine, EngineDefault, UpgradeOptions, UpgradePlan,
-  Volume, VolumeDetail, VolumeFile, VolumeBackup, VolumeBackupStatus, VolumeBackupSchedule, WorkspaceStorage, StorageClassOption, Backup, BackupSchedule, DatabaseBackupSet, DatabaseBackupSetSchedule, BackupSetsResponse, DiscoveredSet, AdoptResult, SetRestoreResult, VerifyResult, AccentCode, AccentPolicy, MetricSample, StatsSample, ApiKey, ApiKeyCreated, CreateApiKeyInput,
+  Volume, VolumeDetail, VolumeFile, VolumeBackup, VolumeBackupStatus, VolumeBackupSchedule, WorkspaceStorage, StorageClassOption, Backup, BackupSchedule, DatabaseBackupSet, DatabaseBackupSetSchedule, BackupSetsResponse, DiscoveredSet, AdoptResult, SetRestoreResult, VerifyResult, AccentCode, AccentPolicy, MetricSample, StatsSample, ApiKey, ApiKeyCreated, CreateApiKeyInput, CreateServiceAccountKeyInput, User,
   Member, Invitation, AuditLog, AuditLogDetail, RecentEvent, PageableResponse, Job, CronJob, WorkspaceUsage, WorkspaceLiveSample, WorkspaceHistoryPoint,
   SecurityStatus, SecurityOverview, SecurityPolicy, SavePolicyInput, SecurityEvent, ApprovedBinding,
 } from './types'
@@ -239,6 +239,18 @@ export const usageApi = {
   // Time-bucketed workspace usage aggregated from stored per-app samples (sparkline).
   history: (ws: number, since = '1h') =>
     api.get<ApiResponse<WorkspaceHistoryPoint[]>>(`${w(ws)}/usage/history`, { params: { since } }),
+}
+
+export const serviceAccountApi = {
+  list: (ws: number) => api.get<ApiResponse<User[]>>(`${w(ws)}/service-accounts`),
+  create: (ws: number, name: string, role: string) =>
+    api.post<ApiResponse<User>>(`${w(ws)}/service-accounts`, { name, role }),
+  remove: (ws: number, id: number) => api.delete<ApiResponse<{ message: string }>>(`${w(ws)}/service-accounts/${id}`),
+  keys: (ws: number, id: number) => api.get<ApiResponse<ApiKey[]>>(`${w(ws)}/service-accounts/${id}/keys`),
+  createKey: (ws: number, id: number, input: CreateServiceAccountKeyInput) =>
+    api.post<ApiResponse<ApiKeyCreated>>(`${w(ws)}/service-accounts/${id}/keys`, input),
+  revokeKey: (ws: number, id: number, keyId: number) =>
+    api.delete<ApiResponse<{ message: string }>>(`${w(ws)}/service-accounts/${id}/keys/${keyId}`),
 }
 
 export const memberApi = {

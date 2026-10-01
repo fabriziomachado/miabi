@@ -200,7 +200,9 @@ type Config struct {
 	// did before the split, with ProxyNetwork as the only fabric. Set by the managed installer.
 	InternalNetwork string
 
-	// APIKeyScopeEnforcement is how strictly API-key scopes are checked: off, warn or enforce.
+	// APIKeyScopeEnforcement is how strictly API-key scopes are checked: off, warn or enforce. Empty
+	// means enforce, except on an install upgraded with API keys already in use (see
+	// middlewares.ResolveScopeMode).
 	APIKeyScopeEnforcement string
 
 	// ControlURL is the public base URL remote nodes reach the control plane at
@@ -632,7 +634,7 @@ func New() *Config {
 		KeyRotateMonths:            goutils.EnvInt("MIABI_KEY_ROTATE_MONTHS", 6),
 		ProxyNetwork:               goutils.Env("MIABI_PROXY_NETWORK", goutils.Env("MIABI_GOMA_NETWORK", "miabi")),
 		InternalNetwork:            goutils.Env("MIABI_INTERNAL_NETWORK", ""),
-		APIKeyScopeEnforcement:     goutils.Env("MIABI_API_KEY_SCOPE_ENFORCEMENT", "warn"),
+		APIKeyScopeEnforcement:     goutils.Env("MIABI_API_KEY_SCOPE_ENFORCEMENT", ""),
 		ControlURL:                 goutils.Env("MIABI_CONTROL_URL", goutils.Env("MIABI_API_URL", "")),
 		RegistrationEnabled:        goutils.EnvBool("MIABI_REGISTRATION_ENABLED", false),
 		RequireEmailVerification:   goutils.Env("MIABI_REQUIRE_EMAIL_VERIFICATION", ""),

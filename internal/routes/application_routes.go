@@ -459,6 +459,14 @@ func (r *Router) applicationRoutes() []okapi.RouteDefinition {
 		},
 		{
 			Method:      http.MethodGet,
+			Path:        base + "/{appID}/deployments/{deploymentID}",
+			Group:       apps,
+			Middlewares: scoped(models.WorkspaceRoleViewer),
+			Handler:     r.h.app.GetDeployment,
+			Summary:     "Get one deployment",
+		},
+		{
+			Method:      http.MethodGet,
 			Path:        base + "/{appID}/deployments/{deploymentID}/logs",
 			Group:       apps,
 			Middlewares: scoped(models.WorkspaceRoleViewer),

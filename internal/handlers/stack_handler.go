@@ -374,7 +374,7 @@ func (h *StackHandler) stackAppIDs(c *okapi.Context) (uint, uint, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	appID, err := strconv.Atoi(c.Param("appID"))
+	appID, err := appParamInt(c)
 	if err != nil || appID <= 0 {
 		return 0, 0, errors.New("invalid app id")
 	}

@@ -260,7 +260,7 @@ func (s *Service) Authenticate(ctx context.Context, p *models.OAuthProvider, cod
 
 	user, err := s.users.FindByEmail(email)
 	if err == nil {
-		if !user.Active {
+		if !user.Active || user.IsService() {
 			return nil, ErrAccountDisabled
 		}
 		return user, nil
@@ -345,7 +345,7 @@ func (s *Service) ProvisionSSOUser(ctx context.Context, email, name, username st
 		return nil, ErrNoEmail
 	}
 	if user, err := s.users.FindByEmail(email); err == nil {
-		if !user.Active {
+		if !user.Active || user.IsService() {
 			return nil, ErrAccountDisabled
 		}
 		return user, nil

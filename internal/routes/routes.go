@@ -97,6 +97,7 @@ import (
 	"github.com/miabi-io/miabi/internal/services/search"
 	"github.com/miabi-io/miabi/internal/services/secpolicy"
 	"github.com/miabi-io/miabi/internal/services/secret"
+	"github.com/miabi-io/miabi/internal/services/serviceaccount"
 	"github.com/miabi-io/miabi/internal/services/session"
 	"github.com/miabi-io/miabi/internal/services/settings"
 	"github.com/miabi-io/miabi/internal/services/stack"
@@ -153,6 +154,7 @@ type routerHandlers struct {
 	health          *handlers.HealthHandler
 	auth            *handlers.AuthHandler
 	apiKey          *handlers.APIKeyHandler
+	serviceAccount  *handlers.ServiceAccountHandler
 	workspace       *handlers.WorkspaceHandler
 	location        *handlers.LocationHandler
 	app             *handlers.ApplicationHandler
@@ -264,6 +266,15 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 	portBindingRepo := repositories.NewPortBindingRepository(db)
 	appEventRepo := repositories.NewAppEventRepository(db)
 	settingRepo := repositories.NewSettingRepository(db)
+	legacyScope := ""
+	if st, err := settingRepo.Get(middlewares.LegacyScopeModeSetting); err == nil && st != nil {
+		legacyScope = st.Value
+	}
+	scopeMode, scopeWhy := middlewares.ResolveScopeMode(cfg.APIKeyScopeEnforcement, legacyScope)
+	if scopeMode != middlewares.ScopeModeEnforce {
+		logger.Warn("API key scopes are not enforced: keys can do more than their scopes allow. Review api_key.scope_violation audit entries, then set MIABI_API_KEY_SCOPE_ENFORCEMENT=enforce",
+			"mode", scopeMode, "why", scopeWhy)
+	}
 	oauthRepo := repositories.NewOAuthProviderRepository(db)
 
 	sessionStore := session.NewStore(redisClient)
@@ -1260,8 +1271,8 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 		},
 		v1:              app.Group("/api/v1"),
 		authenticate:    middlewares.Authenticate(jwtAuth, apiKeyService, userRepo, appRepo),
-		scope:           middlewares.WorkspaceScope(workspaceRepo, customRoleRepo),
-		scopeMode:       middlewares.ParseScopeMode(cfg.APIKeyScopeEnforcement),
+		scope:           middlewares.WorkspaceScope(workspaceRepo, customRoleRepo, appRepo),
+		scopeMode:       scopeMode,
 		audit:           auditLogger,
 		systemAdmin:     middlewares.RequireSystemAdmin(userRepo, elevationService),
 		systemAdminRole: middlewares.RequireSystemAdmin(userRepo, nil),
@@ -1277,6 +1288,7 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 			health:          handlers.NewHealthHandler(db, redisClient, dockerClient),
 			auth:            handlers.NewAuthHandler(authService, userRepo, sessionRepo, auditLogger, settingsProvider, cfg.DevMode, cfg.PasswordResetEnabled),
 			apiKey:          apiKeyHandler,
+			serviceAccount:  handlers.NewServiceAccountHandler(serviceaccount.NewService(userRepo, workspaceRepo, apiKeyService, apiKeyRepo), auditLogger),
 			usage:           handlers.NewUsageHandler(quotaService, appRepo, dbRepo, volumeRepo, networkRepo, jobRepo, apiKeyRepo, workspaceRepo, repositories.NewRunnerRepository(db)),
 			workspace:       handlers.NewWorkspaceHandler(workspaceService, accountService, auditRepo, userRepo, auditLogger, ee),
 			location:        handlers.NewLocationHandler(placer, auditLogger),
@@ -1652,6 +1664,7 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 	r.register(r.authRoutes()...)
 	r.register(r.apiKeyRoutes()...)
 	r.register(r.workspaceRoutes()...)
+	r.register(r.serviceAccountRoutes()...)
 	r.register(r.roleRoutes()...)
 	r.register(r.applicationRoutes()...)
 	r.register(r.jobRoutes()...)

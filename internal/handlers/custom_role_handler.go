@@ -136,7 +136,7 @@ func (h *CustomRoleHandler) AssignMember(c *okapi.Context, req *AssignCustomRole
 			return c.AbortForbidden(err.Error(), err)
 		case errors.Is(err, workspace.ErrLastOwner):
 			return c.AbortWithError(409, err)
-		case errors.Is(err, workspace.ErrInvalidRole):
+		case errors.Is(err, workspace.ErrInvalidRole), errors.Is(err, workspace.ErrServiceAccountOwner):
 			return c.AbortBadRequest(err.Error())
 		default:
 			return c.AbortInternalServerError("failed to assign role", err)

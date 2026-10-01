@@ -308,7 +308,7 @@ func (h *RouteHandler) id(c *okapi.Context) (uint, error) {
 }
 
 func (h *RouteHandler) appID(c *okapi.Context) (uint, error) {
-	id, err := strconv.Atoi(c.Param("appID"))
+	id, err := appParamInt(c)
 	if err != nil || id <= 0 {
 		return 0, errors.New("invalid application id")
 	}

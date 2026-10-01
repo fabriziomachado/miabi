@@ -331,7 +331,15 @@ export interface User {
   // it always names a workspace the user can open (absent when they belong to none).
   default_workspace_id?: number
   preferences?: UserPreferences
+  /** 'service' marks a non-human account that authenticates only with API keys. */
+  kind?: UserKind
+  /** The workspace that owns a service account; absent for people. */
+  service_workspace_id?: number | null
+  created_at?: string
+  last_login_at?: string | null
 }
+
+export type UserKind = 'user' | 'service'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 
@@ -2316,6 +2324,13 @@ export interface CreateApiKeyInput {
   expires_in_days?: number
   // Omit / null for an account-wide key; set to scope the key to one workspace.
   workspace_id?: number | null
+}
+
+export interface CreateServiceAccountKeyInput {
+  name: string
+  scopes: string[]
+  allowed_ips?: string[]
+  expires_in_days?: number
 }
 
 export interface Member {

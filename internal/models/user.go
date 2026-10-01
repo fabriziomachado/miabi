@@ -29,6 +29,17 @@ const (
 	AuthSourceSCIM  = "scim"
 )
 
+// User kinds. A service account is a non-human identity owned by a workspace: it signs in only
+// with API keys, never with a password, SSO or a console session.
+const (
+	UserKindHuman   = "user"
+	UserKindService = "service"
+)
+
+// ServiceAccountEmailDomain is the reserved (RFC 2606) domain of service-account emails, so no
+// identity provider or mailbox can ever claim one.
+const ServiceAccountEmailDomain = "service-accounts.invalid"
+
 // User is a global identity.
 type User struct {
 	ID                       uint       `json:"id" gorm:"primaryKey"`
@@ -42,6 +53,9 @@ type User struct {
 	Active                   bool       `json:"active" gorm:"default:true;not null"`
 	MustChangePassword       bool       `json:"must_change_password" gorm:"not null;default:false"`
 	AuthSource               string     `json:"auth_source" gorm:"not null;default:'local'"`
+	Kind                     string     `json:"kind" gorm:"not null;default:'user';index"`
+	// ServiceWorkspaceID is the workspace that owns a service account; its admins manage it.
+	ServiceWorkspaceID *uint `json:"service_workspace_id,omitempty" gorm:"index"`
 	OrganizationID           *uint      `json:"organization_id,omitempty" gorm:"index"`
 	WorkspaceLimit           *int       `json:"workspace_limit,omitempty"`
 	WorkspaceMembershipLimit *int       `json:"workspace_membership_limit,omitempty"`
@@ -55,6 +69,9 @@ type User struct {
 }
 
 func (u *User) IsAdmin() bool { return u.Role == SystemRoleAdmin }
+
+// IsService reports whether this is a service account.
+func (u *User) IsService() bool { return u.Kind == UserKindService }
 
 // IsExternal reports whether an identity provider owns this account. Such a profile is
 // not the user's to edit: the provider re-asserts name and handle on every sign-in, so

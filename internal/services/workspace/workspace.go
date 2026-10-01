@@ -39,6 +39,7 @@ var (
 	ErrInvitePending            = errors.New("a pending invitation for this email already exists")
 	ErrInvalidInvite            = errors.New("invalid or expired invitation")
 	ErrInvalidRole              = errors.New("invalid role")
+	ErrServiceAccountOwner      = errors.New("a service account cannot own a workspace")
 	ErrSystemProtected          = errors.New("the platform system workspace cannot be deleted")
 	ErrOutranked                = errors.New("cannot modify a member whose role outranks yours")
 	ErrRoleAboveSelf            = errors.New("cannot grant a role more privileged than your own")
@@ -225,6 +226,9 @@ func (s *Service) homeOrg(userID uint) *models.Organization {
 // workspace-ownership limit. No-op when limits are unwired or the effective limit is unlimited. Fails open
 // on a count error (mirrors checkMemberCapacity), so a transient DB hiccup never blocks legitimate work.
 func (s *Service) canOwnAnother(userID uint) error {
+	if u, err := s.users.FindByID(userID); err == nil && u.IsService() {
+		return ErrServiceAccountOwner
+	}
 	if s.globalLimit == nil && s.overrideEntitled == nil {
 		return nil // limits not wired
 	}
