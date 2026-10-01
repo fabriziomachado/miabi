@@ -14,4 +14,5 @@ const (
 	RegistryVersion       = "1.0.0"
 	StorageClassesVersion = "1.0.0"
 	AnalyticsVersion      = "1.0.0"
+	HealthProbeVersion    = "1.0.0"
 )

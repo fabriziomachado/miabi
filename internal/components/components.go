@@ -25,7 +25,7 @@ type Status string
 
 const (
 	StatusOn         Status = "on"
-	StatusOff        Status = "off"        // turned off in configuration or settings
+	StatusOff        Status = "off"        // turned off in configuration or settings, or not in this build
 	StatusEnterprise Status = "enterprise" // needs an Enterprise license this instance lacks
 )
 
@@ -57,10 +57,11 @@ type Catalog struct {
 // Probes answer the runtime questions a component's status depends on. Any may be nil, which reads
 // as "on" (or no detail), so a partially wired instance still lists every component.
 type Probes struct {
-	RegistryEnabled        func() bool
-	AnalyticsEnabled       func() bool
-	StorageClassesLicensed func() bool
-	Catalog                func() Catalog
+	RegistryEnabled  func() bool
+	AnalyticsEnabled func() bool
+	// HealthProbeBundled reports whether this build embeds the probe binaries.
+	HealthProbeBundled func() bool
+	Catalog            func() Catalog
 }
 
 // Service lists the components with their live status.
@@ -106,8 +107,15 @@ func (s *Service) List() []Component {
 		},
 		{
 			ID: "storage-classes", Name: "Storage classes", Version: StorageClassesVersion, Stability: StabilityBeta,
-			Status:       onIf(s.probes.StorageClassesLicensed, StatusEnterprise),
+			// Every edition may register classes; a license only lifts the Community cap.
+			Status:       StatusOn,
 			ChangelogURL: historyURL + "internal/services/storageclass",
+		},
+		{
+			// Without the binaries (no `make build-probe`), HTTP checks fall back to a shell probe.
+			ID: "healthprobe", Name: "Health probe", Version: HealthProbeVersion, Stability: StabilityBeta,
+			Status:       onIf(s.probes.HealthProbeBundled, StatusOff),
+			ChangelogURL: historyURL + "cmd/healthprobe",
 		},
 	}
 }

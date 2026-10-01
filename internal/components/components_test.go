@@ -21,7 +21,7 @@ func byID(list []Component) map[string]Component {
 
 func TestListOrderAndVersions(t *testing.T) {
 	list := NewService(Probes{}).List()
-	want := []string{"web", "gitops", "pipeline", "marketplace", "analytics", "registry", "storage-classes"}
+	want := []string{"web", "gitops", "pipeline", "marketplace", "analytics", "registry", "storage-classes", "healthprobe"}
 	if len(list) != len(want) {
 		t.Fatalf("got %d components, want %d", len(list), len(want))
 	}
@@ -44,15 +44,18 @@ func TestListOrderAndVersions(t *testing.T) {
 
 func TestStatusFollowsProbes(t *testing.T) {
 	off := func() bool { return false }
-	c := byID(NewService(Probes{RegistryEnabled: off, StorageClassesLicensed: off, AnalyticsEnabled: off}).List())
+	c := byID(NewService(Probes{RegistryEnabled: off, AnalyticsEnabled: off, HealthProbeBundled: off}).List())
+	if c["healthprobe"].Status != StatusOff {
+		t.Errorf("healthprobe = %s, want off when the build lacks the binaries", c["healthprobe"].Status)
+	}
 	if c["analytics"].Status != StatusOff {
 		t.Errorf("analytics = %s, want off", c["analytics"].Status)
 	}
 	if c["registry"].Status != StatusOff {
 		t.Errorf("registry = %s, want off", c["registry"].Status)
 	}
-	if c["storage-classes"].Status != StatusEnterprise {
-		t.Errorf("storage classes = %s, want enterprise", c["storage-classes"].Status)
+	if c["storage-classes"].Status != StatusOn {
+		t.Errorf("storage classes = %s, want on: Community can register classes too", c["storage-classes"].Status)
 	}
 
 	c = byID(NewService(Probes{}).List())
