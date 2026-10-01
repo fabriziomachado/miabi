@@ -31,6 +31,16 @@ func Binary(arch string) ([]byte, bool) {
 	return b, true
 }
 
+// Bundled reports whether this build carries a probe for any architecture.
+func Bundled() bool {
+	for _, arch := range []string{"amd64", "arm64"} {
+		if _, ok := Binary(arch); ok {
+			return true
+		}
+	}
+	return false
+}
+
 func goArch(arch string) (string, bool) {
 	switch strings.ToLower(arch) {
 	case "x86_64", "amd64":

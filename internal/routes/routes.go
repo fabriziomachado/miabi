@@ -22,6 +22,7 @@ import (
 	"github.com/miabi-io/miabi/internal/dto"
 	"github.com/miabi-io/miabi/internal/enterprise"
 	"github.com/miabi-io/miabi/internal/handlers"
+	"github.com/miabi-io/miabi/internal/healthprobe"
 	"github.com/miabi-io/miabi/internal/logstore"
 	"github.com/miabi-io/miabi/internal/metrics"
 	"github.com/miabi-io/miabi/internal/middlewares"
@@ -1360,8 +1361,8 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 					st, err := registryServerService.Get()
 					return err == nil && st.Enabled && registryServerService.HostFor(st) != ""
 				},
-				StorageClassesLicensed: func() bool { return ee.Has(enterprise.FlagStorageClasses) },
-				AnalyticsEnabled:       func() bool { return cfg.AnalyticsEnabled },
+				AnalyticsEnabled:   func() bool { return cfg.AnalyticsEnabled },
+				HealthProbeBundled: healthprobe.Bundled,
 				Catalog: func() components.Catalog {
 					n, synced, generated := marketplaceRemote.CatalogInfo()
 					c := components.Catalog{Templates: n, GeneratedAt: generated}
