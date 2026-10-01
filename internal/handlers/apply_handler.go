@@ -42,7 +42,7 @@ func NewApplyHandler(svc *apply.Service, apps *application.Service, placer *Plac
 // copy invites two documents claiming the same app.
 func (h *ApplyHandler) ExportApplication(c *okapi.Context) error {
 	wsID := middlewares.WorkspaceID(c)
-	id, err := resolveID(c.Param("appID"), h.apps.IDByUID)
+	id, err := appRef(c, h.apps.IDByUID)
 	if err != nil {
 		return c.AbortBadRequest("invalid app id")
 	}

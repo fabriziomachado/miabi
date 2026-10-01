@@ -58,6 +58,7 @@ func wsFixture() fakeWS {
 		byID:   map[uint]*models.Workspace{7: acme, 8: other},
 		byName: map[string]*models.Workspace{"acme": acme, "other": other},
 		members: map[string]*models.WorkspaceMember{
+			"7:1":  {WorkspaceID: 7, UserID: 1, Role: models.WorkspaceRoleDeveloper},
 			"7:42": {WorkspaceID: 7, UserID: 42, Role: models.WorkspaceRoleDeveloper},
 			"7:99": {WorkspaceID: 7, UserID: 99, Role: models.WorkspaceRoleViewer},
 		},
@@ -377,5 +378,40 @@ func TestAuthorizeLeavesUnboundTokensAlone(t *testing.T) {
 	got := svc.Authorize(AuthInput{Authorization: basic("x", "tok"), URI: "/v2/acme/anything/blobs/uploads/", Method: "POST"})
 	if got.Status != http.StatusOK {
 		t.Fatalf("unbound workspace token refused: %d %s", got.Status, got.Reason)
+	}
+}
+
+// A workspace-bound token is cut off when its owner leaves the workspace or lacks the role, and
+// admin-scoped tokens use the registry like the API's scope ladder says.
+func TestAuthorizeWorkspaceTokenFollowsMembership(t *testing.T) {
+	ws := uint(7)
+	cases := []struct {
+		name   string
+		user   uint
+		scopes []string
+		push   bool
+		want   string
+	}{
+		{"member pulls", 1, []string{models.ScopeRead}, false, ""},
+		{"removed member", 5, []string{models.ScopeWrite}, false, "you are not a member of this workspace"},
+		{"viewer cannot push", 99, []string{models.ScopeWrite}, true, "your role does not permit pushing to this workspace"},
+		{"admin scope pushes", 1, []string{models.ScopeAdmin}, true, ""},
+		{"admin scope pulls", 1, []string{models.ScopeAdmin}, false, ""},
+		{"deploy scope pushes", 1, []string{models.ScopeDeploy}, true, ""},
+		{"read scope cannot push", 1, []string{models.ScopeRead}, true, "push requires a write or deploy scope"},
+	}
+	for _, c := range cases {
+		s := &Service{ws: wsFixture()}
+		key := &models.APIKey{WorkspaceID: &ws, UserID: c.user, Scopes: c.scopes}
+		if got := s.authorizePrincipal(key, 7, "acme/api", c.push); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+	// Machine job credentials keep working without a member subject.
+	app := uint(3)
+	job := &models.APIKey{WorkspaceID: &ws, UserID: 0, Ephemeral: true, ApplicationID: &app, Scopes: []string{models.ScopeRegistryWrite}}
+	s := &Service{ws: wsFixture(), apps: fakeApps{3: {ID: 3, WorkspaceID: 7, Name: "api"}}}
+	if got := s.authorizePrincipal(job, 7, "acme/api", true); got != "" {
+		t.Errorf("job credential: %q", got)
 	}
 }

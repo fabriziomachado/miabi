@@ -5,7 +5,11 @@ package repositories
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/miabi-io/miabi/internal/models"
 	"gorm.io/gorm"
@@ -344,6 +348,34 @@ func (r *ApplicationRepository) EnvKeyOwners(appIDs []uint) (map[string][]uint, 
 // IDByUID resolves an application's uid to its numeric id.
 func (r *ApplicationRepository) IDByUID(uid string) (uint, error) {
 	return idByUID[models.Application](r.db, uid)
+}
+
+// IDByRef resolves an app reference within a workspace: a numeric id, a uid, or the app's name.
+// Digits are tried as an id first and, when no app of the workspace has that id, as a name (names
+// may be all digits).
+func (r *ApplicationRepository) IDByRef(workspaceID uint, ref string) (uint, error) {
+	ref = strings.TrimSpace(ref)
+	var id uint
+	find := func(where string, arg any) uint {
+		var got uint
+		r.db.Model(&models.Application{}).Where("workspace_id = ? AND "+where, workspaceID, arg).Limit(1).Pluck("id", &got)
+		return got
+	}
+	if n, err := strconv.ParseUint(ref, 10, 64); err == nil && n > 0 {
+		id = find("id = ?", n)
+	}
+	if id == 0 {
+		if _, err := uuid.Parse(ref); err == nil {
+			id = find("uid = ?", ref)
+		}
+	}
+	if id == 0 && ref != "" {
+		id = find("name = ?", strings.ToLower(ref))
+	}
+	if id == 0 {
+		return 0, gorm.ErrRecordNotFound
+	}
+	return id, nil
 }
 
 // ImageRefs returns the image reference every application names, whatever its state. Housekeeping's

@@ -69,11 +69,28 @@ func entitlementAbort(c *okapi.Context, err error) error {
 }
 
 func appIDParam(c *okapi.Context) (uint, error) {
-	id, err := strconv.Atoi(c.Param("appID"))
+	id, err := appParamInt(c)
 	if err != nil || id <= 0 {
 		return 0, errors.New("invalid app id")
 	}
 	return uint(id), nil
+}
+
+// appParamInt returns the {appID} WorkspaceScope resolved (an id, uid or name), falling back to
+// parsing a numeric id on routes without it.
+func appParamInt(c *okapi.Context) (int, error) {
+	if id := middlewares.AppID(c); id != 0 {
+		return int(id), nil
+	}
+	return strconv.Atoi(c.Param("appID"))
+}
+
+// appRef is resolveID for {appID}, preferring the id WorkspaceScope resolved.
+func appRef(c *okapi.Context, resolveUID func(string) (uint, error)) (uint, error) {
+	if id := middlewares.AppID(c); id != 0 {
+		return id, nil
+	}
+	return resolveID(c.Param("appID"), resolveUID)
 }
 
 // resolveID resolves a route param that is either a numeric primary key or a resource uid to the

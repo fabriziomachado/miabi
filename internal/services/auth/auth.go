@@ -39,6 +39,8 @@ var (
 	ErrEmailTaken         = errors.New("email already registered")
 	ErrAccountDisabled    = errors.New("account is disabled")
 	ErrInvalidToken       = errors.New("invalid or expired token")
+	// ErrServiceAccountSession refuses a console session to a service account: it uses API keys only.
+	ErrServiceAccountSession = errors.New("service accounts cannot sign in")
 
 	ErrTwoFactorAlreadyEnabled = errors.New("two-factor authentication is already enabled")
 	ErrTwoFactorNotEnabled     = errors.New("two-factor authentication is not enabled")
@@ -88,6 +90,9 @@ func (s *Service) Authenticate(identifier, password string) (*models.User, error
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
+	if user.IsService() {
+		return nil, ErrInvalidCredentials
+	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
@@ -112,7 +117,11 @@ func (s *Service) lookupByIdentifier(identifier string) (*models.User, error) {
 }
 
 // IssueToken creates a signed JWT carrying a unique jti.
+// Service accounts are refused here, the one place every console session is minted.
 func (s *Service) IssueToken(user *models.User) (token, jti string, err error) {
+	if user.IsService() {
+		return "", "", ErrServiceAccountSession
+	}
 	jti = uuid.NewString()
 	token, err = okapi.GenerateJwtToken(s.jwtKey, jwt.MapClaims{
 		"sub":   user.ID,
@@ -133,7 +142,7 @@ func (s *Service) Revoke(ctx context.Context, jti string) {
 // token (to be emailed) and never reveals whether the email exists.
 func (s *Service) CreatePasswordReset(email string) (rawToken string, user *models.User, err error) {
 	user, err = s.users.FindByEmail(email)
-	if err != nil {
+	if err != nil || user.IsService() {
 		return "", nil, nil // do not leak existence
 	}
 	raw, hash := generateToken()

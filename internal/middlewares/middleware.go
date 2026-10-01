@@ -24,6 +24,7 @@ const (
 	CtxUserID            = "user_id"
 	CtxAuthMethod        = "auth_method"
 	CtxWorkspaceID       = "workspace_id"
+	CtxAppID             = "app_id"
 	CtxWorkspaceRole     = "workspace_role"
 	CtxPermissions       = "workspace_permissions"
 	CtxAPIKeyID          = "api_key_id"
@@ -154,7 +155,11 @@ func authAPIKey(c *okapi.Context, apiKeys *auth.APIKeyService, users *repositori
 	// A machine-minted job credential is confined to the application it was issued for.
 	if key.Ephemeral {
 		c.Set(CtxAPIKeyEphemeral, true)
-		if err := confineEphemeralKey(c, boundApp, apps); err != nil {
+		var keyWS uint
+		if key.WorkspaceID != nil {
+			keyWS = *key.WorkspaceID
+		}
+		if err := confineEphemeralKey(c, boundApp, apps, keyWS); err != nil {
 			return err
 		}
 	}

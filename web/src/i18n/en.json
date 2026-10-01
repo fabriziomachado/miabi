@@ -1172,6 +1172,9 @@
       },
       "workspaceSettings": {
         "removeNameFromThis": "Remove {name} from this workspace?"
+      },
+      "serviceAccounts": {
+        "delete": "Disable \"{name}\"? All of its API keys are revoked immediately and it is removed from every workspace it belongs to, so any automation using it stops working. This cannot be undone."
       }
     },
     "title": {
@@ -1266,7 +1269,8 @@
       "runGarbageCollection": "Run garbage collection",
       "tearDownGateway": "Tear down gateway",
       "testDnsProvider": "Test DNS provider",
-      "expandVolume": "Expand volume"
+      "expandVolume": "Expand volume",
+      "deleteServiceAccount": "Delete service account"
     }
   },
   "count": {
@@ -2657,6 +2661,11 @@
       "roleUpdated": "Role updated",
       "tokenCopied": "Token copied",
       "updated": "Workspace updated"
+    },
+    "serviceAccounts": {
+      "created": "Service account created",
+      "deleted": "Service account disabled",
+      "idCopied": "Service account ID copied"
     }
   },
   "oauth": {
@@ -3989,7 +3998,8 @@
       "notifications": "Notifications",
       "portability": "Portability",
       "roles": "Roles",
-      "usage": "Usage"
+      "usage": "Usage",
+      "serviceAccounts": "Service accounts"
     },
     "theSystemWorkspaceNameIs": "The system workspace name is reserved and cannot be changed.",
     "typeToConfirm": "Type {name} to confirm",
@@ -4001,7 +4011,9 @@
     "useSslHttps": "Use SSL (HTTPS)",
     "volumeBackupPath": "Volume backup path",
     "workspaces": "Workspaces",
-    "yourOrganization": "Your organization"
+    "yourOrganization": "Your organization",
+    "serviceAccount": "Service account",
+    "serviceAccountHint": "A non-human account that signs in only with API keys"
   },
   "adminUnlock": {
     "title": "Unlock the admin console",
@@ -4034,5 +4046,29 @@
     },
     "feedback": "Report an issue",
     "dismiss": "Dismiss"
+  },
+  "serviceAccounts": {
+    "title": "Service accounts",
+    "intro": "Service accounts are non-human identities for automation (CI, agents, scripts). They cannot sign in to the console and authenticate only with API keys you create here.",
+    "new": "New service account",
+    "create": "Create account",
+    "creating": "Creating…",
+    "empty": "No service accounts",
+    "emptyHint": "Create one to give automation its own identity and keys instead of a person's.",
+    "id": "ID",
+    "created": "Created",
+    "keys": "Keys",
+    "hideKeys": "Hide keys",
+    "keysFor": "API keys for {name}",
+    "newKeyFor": "New API key for {name}",
+    "noKeys": "This service account has no API keys yet.",
+    "namePlaceholder": "e.g. ci-deployer",
+    "roleHint": "The account's role in this workspace. A service account can never be an owner.",
+    "createKey": "Create key",
+    "copyKey": "Copy key",
+    "copied": "Copied!",
+    "never": "Never",
+    "neverExpires": "This key never expires.",
+    "expiresOn": "Expires {date}"
   }
 }

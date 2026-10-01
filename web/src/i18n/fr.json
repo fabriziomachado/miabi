@@ -1172,6 +1172,9 @@
       },
       "workspaceSettings": {
         "removeNameFromThis": "Retirer {name} de cet espace de travail ?"
+      },
+      "serviceAccounts": {
+        "delete": "Désactiver « {name} » ? Toutes ses clés API sont révoquées immédiatement et il est retiré de tous ses espaces de travail : toute automatisation qui l'utilise cessera de fonctionner. Cette action est irréversible."
       }
     },
     "title": {
@@ -1266,7 +1269,8 @@
       "runGarbageCollection": "Lancer le nettoyage",
       "tearDownGateway": "Démanteler la passerelle",
       "testDnsProvider": "Tester le fournisseur DNS",
-      "expandVolume": "Étendre le volume"
+      "expandVolume": "Étendre le volume",
+      "deleteServiceAccount": "Supprimer le compte de service"
     }
   },
   "count": {
@@ -2657,6 +2661,11 @@
       "roleUpdated": "Rôle mis à jour",
       "tokenCopied": "Jeton copié",
       "updated": "Espace de travail mis à jour"
+    },
+    "serviceAccounts": {
+      "created": "Compte de service créé",
+      "deleted": "Compte de service désactivé",
+      "idCopied": "ID du compte de service copié"
     }
   },
   "oauth": {
@@ -3989,7 +3998,8 @@
       "notifications": "Notifications",
       "portability": "Portabilité",
       "roles": "Rôles",
-      "usage": "Utilisation"
+      "usage": "Utilisation",
+      "serviceAccounts": "Comptes de service"
     },
     "theSystemWorkspaceNameIs": "Le nom de l’espace de travail système est réservé et ne peut pas être modifié.",
     "typeToConfirm": "Saisissez {name} pour confirmer",
@@ -4001,7 +4011,9 @@
     "useSslHttps": "Utiliser SSL (HTTPS)",
     "volumeBackupPath": "Chemin des sauvegardes de volumes",
     "workspaces": "Espaces de travail",
-    "yourOrganization": "Votre organisation"
+    "yourOrganization": "Votre organisation",
+    "serviceAccount": "Compte de service",
+    "serviceAccountHint": "Un compte non humain qui s'authentifie uniquement avec des clés API"
   },
   "adminUnlock": {
     "title": "Déverrouiller la console d’administration",
@@ -4034,5 +4046,29 @@
     },
     "feedback": "Signaler un problème",
     "dismiss": "Masquer"
+  },
+  "serviceAccounts": {
+    "title": "Comptes de service",
+    "intro": "Les comptes de service sont des identités non humaines pour l'automatisation (CI, agents, scripts). Ils ne peuvent pas se connecter à la console et s'authentifient uniquement avec les clés API créées ici.",
+    "new": "Nouveau compte de service",
+    "create": "Créer le compte",
+    "creating": "Création…",
+    "empty": "Aucun compte de service",
+    "emptyHint": "Créez-en un pour donner à l'automatisation sa propre identité et ses propres clés plutôt que celles d'une personne.",
+    "id": "ID",
+    "created": "Créé le",
+    "keys": "Clés",
+    "hideKeys": "Masquer les clés",
+    "keysFor": "Clés API de {name}",
+    "newKeyFor": "Nouvelle clé API pour {name}",
+    "noKeys": "Ce compte de service n'a pas encore de clé API.",
+    "namePlaceholder": "ex. ci-deployer",
+    "roleHint": "Le rôle du compte dans cet espace de travail. Un compte de service ne peut jamais être propriétaire.",
+    "createKey": "Créer la clé",
+    "copyKey": "Copier la clé",
+    "copied": "Copiée !",
+    "never": "Jamais",
+    "neverExpires": "Cette clé n'expire jamais.",
+    "expiresOn": "Expire le {date}"
   }
 }

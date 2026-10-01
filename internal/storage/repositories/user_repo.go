@@ -106,6 +106,14 @@ func (r *UserRepository) ListAdminIDs() ([]uint, error) {
 	return ids, err
 }
 
+// ListServiceAccounts returns the active service accounts a workspace owns, oldest first.
+func (r *UserRepository) ListServiceAccounts(workspaceID uint) ([]models.User, error) {
+	var users []models.User
+	err := r.db.Where("kind = ? AND service_workspace_id = ? AND active = ?", models.UserKindService, workspaceID, true).
+		Order("created_at ASC").Find(&users).Error
+	return users, err
+}
+
 // CountActive returns the number of active users.
 func (r *UserRepository) CountActive() (int64, error) {
 	var count int64

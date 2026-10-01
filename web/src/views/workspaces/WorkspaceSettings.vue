@@ -14,6 +14,7 @@ import type { Member, Invitation, WorkspaceRole, WorkspaceUsage, WorkspaceLiveSa
 import { roleApi } from '@/api/rbac'
 import NotificationChannels from '@/views/notifications/Notifications.vue'
 import WorkspaceRolesPanel from '@/components/WorkspaceRolesPanel.vue'
+import ServiceAccountsPanel from '@/components/ServiceAccountsPanel.vue'
 import PortableBackupPanel from '@/components/PortableBackupPanel.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Sparkline from '@/components/Sparkline.vue'
@@ -27,10 +28,11 @@ const ws = useWorkspaceStore()
 const notify = useNotificationStore()
 
 const roles: WorkspaceRole[] = ['owner', 'admin', 'developer', 'viewer']
-type Tab = 'settings' | 'members' | 'roles' | 'usage' | 'backup' | 'portability' | 'notifications'
-const tabs: { id: Tab; label: string; icon: string }[] = [
+type Tab = 'settings' | 'members' | 'service-accounts' | 'roles' | 'usage' | 'backup' | 'portability' | 'notifications'
+const allTabs: { id: Tab; label: string; icon: string; admin?: boolean }[] = [
   { id: 'settings', label: 'wsSettings.tab.general', icon: 'mdi-cog-outline' },
   { id: 'members', label: 'wsSettings.tab.members', icon: 'mdi-account-group-outline' },
+  { id: 'service-accounts', label: 'wsSettings.tab.serviceAccounts', icon: 'mdi-robot-outline', admin: true },
   { id: 'roles', label: 'wsSettings.tab.roles', icon: 'mdi-shield-account-outline' },
   { id: 'usage', label: 'wsSettings.tab.usage', icon: 'mdi-gauge' },
   { id: 'backup', label: 'wsSettings.tab.backup', icon: 'mdi-cloud-upload-outline' },
@@ -155,6 +157,7 @@ function setTab(t: Tab) {
 
 const isAdmin = computed(() => ws.isWorkspaceAdmin)
 const isOwner = computed(() => ws.isWorkspaceOwner)
+const tabs = computed(() => allTabs.filter((x) => !x.admin || isAdmin.value))
 
 // General. `name` is the unique handle (URL/CLI/docker); `displayName` is the
 // free-text label.
@@ -682,14 +685,18 @@ watch(activeTab, (t) => loadTab(t))
                   <div class="cell-id">
                     <span class="avatar avatar-sm">{{ m.user.name.charAt(0).toUpperCase() }}</span>
                     <span class="cell-text">
-                      <span class="cell-title">{{ m.user.name }}</span>
-                      <span class="cell-sub">{{ m.user.email }}</span>
+                      <span class="cell-title">
+                        {{ m.user.name }}
+                        <span v-if="m.user.kind === 'service'" class="badge badge-neutral sa-badge" :title="$t('wsSettings.serviceAccountHint')">
+                          <span class="mdi mdi-robot-outline"></span>{{ $t('wsSettings.serviceAccount') }}</span>
+                      </span>
+                      <span class="cell-sub">{{ m.user.kind === 'service' && m.user.username ? '@' + m.user.username : m.user.email }}</span>
                     </span>
                   </div>
                 </td>
                 <td>
                   <select v-if="isAdmin" class="form-select" style="max-width: 170px" :aria-label="$t('wsSettings.memberRole')" :value="m.custom_role_id ? 'custom:' + m.custom_role_id : m.role" @change="changeRole(m.user_id, ($event.target as HTMLSelectElement).value)">
-                    <option v-for="r in roles" :key="r" :value="r">{{ r }}</option>
+                    <option v-for="r in (m.user.kind === 'service' ? roles.filter((x) => x !== 'owner') : roles)" :key="r" :value="r">{{ r }}</option>
                     <optgroup v-if="customRoleList.length" label="Custom roles">
                       <option v-for="cr in customRoleList" :key="cr.id" :value="'custom:' + cr.id">{{ cr.name }}</option>
                     </optgroup>
@@ -748,6 +755,8 @@ watch(activeTab, (t) => loadTab(t))
         </div>
       </div>
     </template>
+
+    <ServiceAccountsPanel v-else-if="activeTab === 'service-accounts' && isAdmin" :ws-id="wsId" @changed="loadMembers" />
 
     <!-- Custom roles -->
     <WorkspaceRolesPanel v-else-if="activeTab === 'roles'" :ws-id="wsId" :my-role="myRole" @changed="loadCustomRoles" />
@@ -1111,6 +1120,8 @@ watch(activeTab, (t) => loadTab(t))
 </template>
 
 <style scoped>
+.sa-badge { margin-left: 6px; vertical-align: middle; font-size: 11px; }
+.sa-badge .mdi { font-size: 12px; margin-right: 2px; }
 .ws-title {
   display: flex;
   align-items: center;

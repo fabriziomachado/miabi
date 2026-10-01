@@ -218,7 +218,7 @@ func (h *EventsHandler) loadDatabase(c *okapi.Context) (*models.DatabaseInstance
 }
 
 func (h *EventsHandler) load(c *okapi.Context) (*models.Application, error) {
-	appID, err := strconv.Atoi(c.Param("appID"))
+	appID, err := appParamInt(c)
 	if err != nil || appID <= 0 {
 		return nil, errors.New("invalid app id")
 	}

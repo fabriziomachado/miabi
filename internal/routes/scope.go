@@ -37,15 +37,16 @@ var adminPrefixes = []string{
 // adminSegments make a route administrative wherever they appear: who may act in a workspace, and
 // what the platform recorded about it.
 var adminSegments = map[string]bool{
-	"members":         true,
-	"invitations":     true,
-	"roles":           true,
-	"policies":        true,
-	"api-keys":        true,
-	"backup-settings": true,
-	"audit":           true,
-	"audit-logs":      true,
-	"portable-backup": true,
+	"members":          true,
+	"invitations":      true,
+	"roles":            true,
+	"policies":         true,
+	"api-keys":         true,
+	"service-accounts": true,
+	"backup-settings":  true,
+	"audit":            true,
+	"audit-logs":       true,
+	"portable-backup":  true,
 }
 
 // adminSuffixes are reads that hand back a credential, a key or a shell — the GETs the plan calls

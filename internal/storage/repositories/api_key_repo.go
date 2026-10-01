@@ -60,6 +60,11 @@ func (r *APIKeyRepository) DeleteExpiredEphemeral(now time.Time) (int, error) {
 	return int(res.RowsAffected), res.Error
 }
 
+// RevokeAllByUser revokes every key a user holds, ephemeral ones included.
+func (r *APIKeyRepository) RevokeAllByUser(userID uint) error {
+	return r.db.Model(&models.APIKey{}).Where("user_id = ? AND revoked = ?", userID, false).Update("revoked", true).Error
+}
+
 func (r *APIKeyRepository) Revoke(id uint) error {
 	return r.db.Model(&models.APIKey{}).Where("id = ?", id).Update("revoked", true).Error
 }

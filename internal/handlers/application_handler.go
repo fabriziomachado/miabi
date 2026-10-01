@@ -236,6 +236,9 @@ func toPortSpecs(in []PortSpecBody) []application.PortSpec {
 }
 
 type DeployRequest struct {
+	// Wait blocks up to this many seconds (max 900) until the deployment succeeds, fails or reaches
+	// a canary, and returns it in that state. 0 returns at once.
+	Wait int `query:"wait"`
 	Body struct {
 		// RegistryID optionally overrides the app's registry credential for this
 		// one deploy. Omit to use the app's configured credential.
@@ -275,6 +278,8 @@ type ImportEnvVarsRequest struct {
 }
 
 type RollbackRequest struct {
+	// Wait blocks up to this many seconds (max 900) for the rollback to settle; see DeployRequest.
+	Wait int `query:"wait"`
 	Body struct {
 		ReleaseID uint `json:"release_id" required:"true"`
 	} `json:"body"`
@@ -837,9 +842,23 @@ func (h *ApplicationHandler) Deploy(c *okapi.Context, req *DeployRequest) error 
 	// logs instead of a deployment's. Only an app with an adopted pipeline can reach this branch — a direct
 	// deploy still returns the bare Deployment, so existing clients see no change.
 	if res.Run != nil {
-		return created(c, PipelineRunAccepted{Kind: "pipeline_run", Run: res.Run})
+		run := res.Run
+		if req.Wait > 0 {
+			var done bool
+			if run, done = h.waitPipelineRun(c, app.WorkspaceID, run, req.Wait); !done {
+				c.SetHeader(waitHeader, "timeout")
+			}
+		}
+		return created(c, PipelineRunAccepted{Kind: "pipeline_run", Run: run})
 	}
-	return created(c, res.Deployment)
+	dep := res.Deployment
+	if req.Wait > 0 {
+		var done bool
+		if dep, done = h.waitDeployment(c, dep, req.Wait); !done {
+			c.SetHeader(waitHeader, "timeout")
+		}
+	}
+	return created(c, dep)
 }
 
 // InvalidateBuildCache drops the app's build cache by naming a new generation, so the next build
@@ -946,6 +965,12 @@ func (h *ApplicationHandler) Rollback(c *okapi.Context, req *RollbackRequest) er
 		return c.AbortBadRequest(err.Error())
 	}
 	h.record(c, app.WorkspaceID, "app.rollback", app.ID)
+	if req.Wait > 0 {
+		var done bool
+		if dep, done = h.waitDeployment(c, dep, req.Wait); !done {
+			c.SetHeader(waitHeader, "timeout")
+		}
+	}
 	return created(c, dep)
 }
 
@@ -1342,7 +1367,7 @@ func (h *ApplicationHandler) DeploymentLogsHistory(c *okapi.Context) error {
 }
 
 func (h *ApplicationHandler) load(c *okapi.Context) (*models.Application, error) {
-	id, err := resolveID(c.Param("appID"), h.svc.IDByUID)
+	id, err := appRef(c, h.svc.IDByUID)
 	if err != nil {
 		return nil, errors.New("invalid app id")
 	}

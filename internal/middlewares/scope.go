@@ -11,9 +11,9 @@ import (
 )
 
 // ScopeMode is how strictly API-key scopes are enforced, set by
-// MIABI_API_KEY_SCOPE_ENFORCEMENT. The staged rollout exists because scopes have never been
-// enforced: a key created with the default `read` scope may have been writing for months, and
-// flipping straight to enforce would break it without warning.
+// MIABI_API_KEY_SCOPE_ENFORCEMENT. Warn exists for installs upgraded from releases that never
+// enforced scopes: a key created with the default `read` scope may have been writing for months,
+// and flipping straight to enforce would break it without warning.
 type ScopeMode string
 
 const (
@@ -41,6 +41,22 @@ func ParseScopeMode(s string) ScopeMode {
 	default:
 		return ScopeModeWarn
 	}
+}
+
+// LegacyScopeModeSetting records the mode an install upgraded with existing API keys keeps until an
+// operator chooses: those keys predate enforcement and may rely on scopes they never had.
+const LegacyScopeModeSetting = "api_key_scope_enforcement_legacy"
+
+// ResolveScopeMode picks the effective mode: the operator's setting when given, else the legacy
+// mode recorded at upgrade, else enforce.
+func ResolveScopeMode(configured, legacy string) (ScopeMode, string) {
+	if strings.TrimSpace(configured) != "" {
+		return ParseScopeMode(configured), "configured"
+	}
+	if strings.TrimSpace(legacy) != "" {
+		return ParseScopeMode(legacy), "kept from before scopes were enforced"
+	}
+	return ScopeModeEnforce, "default"
 }
 
 // ScopeViolation describes a request whose API key did not carry the scope its route requires.
@@ -85,6 +101,7 @@ func RequireScope(mode ScopeMode, required string, report func(ScopeViolation)) 
 			})
 		}
 		if mode == ScopeModeEnforce {
+			c.SetHeader(ScopeViolationHeader, required)
 			return c.AbortForbidden("API key missing required scope: " + required)
 		}
 		c.SetHeader(ScopeViolationHeader, required)
