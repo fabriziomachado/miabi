@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/jkaninda/logger"
 	"github.com/miabi-io/miabi/internal/datavolume"
 	"github.com/miabi-io/miabi/internal/docker"
+	"github.com/miabi-io/miabi/internal/healthprobe"
 	"github.com/miabi-io/miabi/internal/logstore"
 	"github.com/miabi-io/miabi/internal/models"
 	"github.com/miabi-io/miabi/internal/runners"
@@ -677,6 +679,11 @@ func (h *DeployHandler) run(ctx context.Context, app *models.Application, dep *m
 		RestartPolicy:    string(app.RestartPolicy),
 		Healthcheck:      buildHealthcheck(app),
 		Labels:           containerLabels(app, dep.ID),
+	}
+	if spec.Healthcheck != nil && app.HealthcheckType == models.HealthcheckHTTP {
+		if info, err := h.eng(app).Info(ctx); err == nil {
+			spec.Files = withBinaryHTTPProbe(app, spec.Healthcheck, spec.Files, info.Arch, sec.ReadOnlyRootfs)
+		}
 	}
 	sec.applyTo(&spec)
 	containerID, err := h.eng(app).RunContainer(ctx, spec)
@@ -1678,20 +1685,8 @@ func buildHealthcheck(app *models.Application) *docker.HealthcheckSpec {
 	var test []string
 	switch app.HealthcheckType {
 	case models.HealthcheckHTTP:
-		port := app.HealthcheckPort
-		if port == 0 {
-			port = app.Port
-		}
-		if port == 0 {
-			port = 80
-		}
-		path := app.HealthcheckHTTPPath
-		if path == "" {
-			path = "/"
-		}
-		url := fmt.Sprintf("http://localhost:%d%s", port, path)
-		// curl when present, else wget (busybox) — covers most images.
-		test = []string{"CMD-SHELL", fmt.Sprintf("curl -fsS %s || wget -qO- %s || exit 1", url, url)}
+		port, path := httpCheckTarget(app)
+		test = []string{"CMD-SHELL", shellHTTPProbe(port, path)}
 	case models.HealthcheckCommand:
 		cmd := strings.TrimSpace(app.HealthcheckCommand)
 		if cmd == "" {
@@ -1708,6 +1703,54 @@ func buildHealthcheck(app *models.Application) *docker.HealthcheckSpec {
 		Retries:     hcRetries(app),
 		StartPeriod: time.Duration(clampInt(app.HealthcheckStartPeriodSeconds, 0, 600)) * time.Second,
 	}
+}
+
+// httpCheckTarget resolves the port and path an HTTP healthcheck probes.
+func httpCheckTarget(app *models.Application) (int, string) {
+	port := app.HealthcheckPort
+	if port == 0 {
+		port = app.Port
+	}
+	if port == 0 {
+		port = 80
+	}
+	path := strings.TrimSpace(app.HealthcheckHTTPPath)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return port, path
+}
+
+// shellHTTPProbe probes with whichever of curl, wget or bash the image has, so
+// slim images without curl/wget still pass. Images without a shell need the
+// injected binary probe (withBinaryHTTPProbe).
+func shellHTTPProbe(port int, path string) string {
+	url := shellQuote(fmt.Sprintf("http://127.0.0.1:%d%s", port, path))
+	devTCP := fmt.Sprintf(`exec 3<>/dev/tcp/127.0.0.1/%d && printf "GET %%s HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" "$1" >&3 && read -r _ c _ <&3 && [ "$c" -ge 200 ] && [ "$c" -lt 400 ]`, port)
+	return "if command -v curl >/dev/null 2>&1; then curl -fsS -o /dev/null " + url +
+		"; elif command -v wget >/dev/null 2>&1; then wget -q -O /dev/null " + url +
+		"; elif command -v bash >/dev/null 2>&1; then bash -c " + shellQuote(devTCP) + " _ " + shellQuote(path) +
+		"; else echo 'no curl, wget or bash in the image: use a command healthcheck' >&2; exit 1; fi"
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// withBinaryHTTPProbe swaps the shell check for the static probe copied in before start, so
+// shell-less images (distroless, scratch) pass too. Skipped without a binary for the node's
+// arch, or on a read-only rootfs, which Docker refuses to copy into.
+func withBinaryHTTPProbe(app *models.Application, hc *docker.HealthcheckSpec, files []docker.FileEntry, arch string, readOnlyRootfs bool) []docker.FileEntry {
+	if hc == nil || app.HealthcheckType != models.HealthcheckHTTP || readOnlyRootfs {
+		return files
+	}
+	bin, ok := healthprobe.Binary(arch)
+	if !ok {
+		return files
+	}
+	port, path := httpCheckTarget(app)
+	hc.Test = []string{"CMD", healthprobe.Path, strconv.Itoa(port), path}
+	return append(slices.Clip(files), docker.FileEntry{Path: healthprobe.Path, Content: string(bin), Mode: "0755"})
 }
 
 func hcInterval(app *models.Application) int {

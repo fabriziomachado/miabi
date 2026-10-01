@@ -17,5 +17,9 @@ coverage.txt
 /internal/web/dist/*
 !/internal/web/dist/.gitkeep
 
+# Healthcheck probe binaries: a `make build-probe` artifact, embedded like the UI.
+/internal/healthprobe/bin/*
+!/internal/healthprobe/bin/.gitkeep
+
 # GoReleaser output
 /dist/
