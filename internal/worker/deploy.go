@@ -1194,21 +1194,29 @@ func (h *DeployHandler) finalizeCanary(deploymentID uint, status models.Deployme
 
 // retireCanary stops and removes an app's canary container and clears its canary
 // state, so a normal deploy cleanly supersedes an in-progress canary.
-func (h *DeployHandler) retireCanary(app *models.Application, dep *models.Deployment) {
+// detachCanary clears the app's canary split, so the next route sync stops sending it traffic, and
+// returns the canary release for retiring once that sync has landed (nil when there is none).
+func (h *DeployHandler) detachCanary(app *models.Application) *models.Release {
 	cur, err := h.apps.FindByID(app.ID)
 	if err != nil || cur.CanaryReleaseID == nil {
-		return
+		return nil
 	}
-	if rel, err := h.releases.FindByID(*cur.CanaryReleaseID); err == nil {
-		h.log(dep, "retiring canary release v"+fmt.Sprint(rel.Version))
-		if rel.ContainerID != "" {
-			_ = h.eng(app).StopContainer(context.Background(), rel.ContainerID, 10)
-			_ = h.eng(app).RemoveContainer(context.Background(), rel.ContainerID, true)
-		}
-		h.finalizeCanary(rel.DeploymentID, models.DeploymentSucceeded, fmt.Sprintf("canary superseded by deployment #%d", dep.Number))
-		_ = h.releases.Delete(rel.ID)
-	}
+	rel, err := h.releases.FindByID(*cur.CanaryReleaseID)
 	_ = h.apps.SetCanary(app.ID, nil, 0)
+	if err != nil {
+		return nil
+	}
+	return rel
+}
+
+func (h *DeployHandler) retireCanaryRelease(app *models.Application, dep *models.Deployment, rel *models.Release) {
+	h.log(dep, "retiring canary release v"+fmt.Sprint(rel.Version))
+	if rel.ContainerID != "" {
+		_ = h.eng(app).StopContainer(context.Background(), rel.ContainerID, 10)
+		_ = h.eng(app).RemoveContainer(context.Background(), rel.ContainerID, true)
+	}
+	h.finalizeCanary(rel.DeploymentID, models.DeploymentSucceeded, fmt.Sprintf("canary superseded by deployment #%d", dep.Number))
+	_ = h.releases.Delete(rel.ID)
 }
 
 // ProcessCanaryStep advances an in-progress canary one step: it health-checks
@@ -1769,29 +1777,27 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
+// routeDrainDelay is how long the previous release keeps serving after the route sync: Goma reloads
+// its file provider after a 500ms debounce (flushing its DNS cache), and edge gateways pull async.
+var routeDrainDelay = 5 * time.Second
+
 // swapAndRelease promotes the new container, retires the previous one, and
 // records an active release.
 func (h *DeployHandler) swapAndRelease(app *models.Application, dep *models.Deployment, image, containerID string) {
-	// A normal deploy supersedes any in-progress canary: retire its container and clear the split so the
-	// route points solely at the new stable release.
-	h.retireCanary(app, dep)
 
-	// Retire the previous active release's container (best-effort).
-	if prev, err := h.releases.FindActive(app.ID); err == nil && prev.ContainerID != "" {
-		h.log(dep, "retiring previous release v"+fmt.Sprint(prev.Version))
-		_ = h.eng(app).StopContainer(context.Background(), prev.ContainerID, 10)
-		_ = h.eng(app).RemoveContainer(context.Background(), prev.ContainerID, true)
-	}
+	prev, _ := h.releases.FindActive(app.ID)
+	canary := h.detachCanary(app)
 
 	version, _ := h.releases.NextVersion(app.ID)
 	rel := &models.Release{
 		ApplicationID: app.ID, DeploymentID: dep.ID, Version: version,
 		Image: image, ContainerID: containerID, Active: true,
-		// Provenance: a pipeline-built deploy carries its commit and catalog image, so the release is a
-		// reproducible artifact and GC never collects a digest the active release references.
 		Commit: dep.Commit, ImageID: dep.ImageID,
 	}
 	if err := h.releases.Create(rel); err != nil {
+		if canary != nil {
+			h.retireCanaryRelease(app, dep, canary)
+		}
 		_ = h.fail(dep, fmt.Errorf("create release: %w", err))
 		return
 	}
@@ -1817,6 +1823,20 @@ func (h *DeployHandler) swapAndRelease(app *models.Application, dep *models.Depl
 		} else {
 			h.log(dep, "proxy routes synced")
 		}
+	}
+
+	retirePrev := prev != nil && prev.ContainerID != "" && prev.ContainerID != containerID
+	if retirePrev || canary != nil {
+		h.log(dep, fmt.Sprintf("draining previous release for %s", routeDrainDelay))
+		time.Sleep(routeDrainDelay)
+	}
+	if canary != nil {
+		h.retireCanaryRelease(app, dep, canary)
+	}
+	if retirePrev {
+		h.log(dep, "retiring previous release v"+fmt.Sprint(prev.Version))
+		_ = h.eng(app).StopContainer(context.Background(), prev.ContainerID, 10)
+		_ = h.eng(app).RemoveContainer(context.Background(), prev.ContainerID, true)
 	}
 
 	h.tagReleaseImage(app, dep, version)
