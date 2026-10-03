@@ -295,7 +295,7 @@ var optionalWhenUnset = map[string]bool{
 	"deployment.update.parallelism": true, "deployment.update.delaySeconds": true,
 	"healthcheck.type": true, "healthcheck.path": true, "healthcheck.port": true, "healthcheck.command": true,
 	"healthcheck.intervalSeconds": true, "healthcheck.timeoutSeconds": true, "healthcheck.retries": true,
-	"healthcheck.startPeriodSeconds": true,
+	"healthcheck.startPeriodSeconds": true, "stack": true,
 }
 
 // optionalWhenUnsetByKind holds the fields compared only when stated for one kind alone. A database's limits may
@@ -458,6 +458,9 @@ func specFields(r Resource) map[string]string {
 		// The credential the image is pulled with is part of the app's identity:
 		// re-pointing it at another registry must converge like any other change.
 		f["registry"] = a.Registry
+		if a.Stack != "" {
+			f["stack"] = a.Stack
+		}
 		// The account, hardening and grants change the container, so a change to any must redeploy. Absent means
 		// the container default, so removing one from a manifest converges too.
 		f["security.runAsUser"] = a.RunAsUser()

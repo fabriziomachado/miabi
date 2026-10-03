@@ -1402,6 +1402,8 @@ func (s *Service) ExportApplication(ctx context.Context, workspaceID uint, name 
 
 // trimDefaults drops what an apply elsewhere would choose anyway, and the blocks that leaves empty.
 func trimDefaults(a *declarative.ApplicationSpec, defaultLocation string) {
+	// The export holds one app, not its Stack, and a manifest may only name a Stack it declares.
+	a.Stack = ""
 	if p := a.Placement; p != nil {
 		if p.Location == defaultLocation {
 			p.Location = ""
@@ -1526,6 +1528,16 @@ func (s *Service) snapshot(ctx context.Context, workspaceID uint) (*declarative.
 		})
 	}
 
+	// Stacks before apps, like volumes and registries: an app names its stack.
+	stacks, err := s.stacks.List(workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot stacks: %w", err)
+	}
+	stackNameByID := make(map[uint]string, len(stacks))
+	for i := range stacks {
+		stackNameByID[stacks[i].ID] = stacks[i].Name
+	}
+
 	apps, err := s.apps.List(workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("snapshot apps: %w", err)
@@ -1538,6 +1550,9 @@ func (s *Service) snapshot(ctx context.Context, workspaceID uint) (*declarative.
 		}
 		ext, pub := s.exposedPorts(workspaceID, full.ID)
 		r := appResource(full, ext, pub, volNameByID, regNameByID, cfgNameByID)
+		if full.StackID != nil {
+			r.Application.Stack = stackNameByID[*full.StackID]
+		}
 		if loc := s.locationName(full.ClusterID); loc != "" {
 			if r.Application.Placement == nil {
 				r.Application.Placement = &declarative.ApplicationPlacementSpec{}
@@ -1592,10 +1607,6 @@ func (s *Service) snapshot(ctx context.Context, workspaceID uint) (*declarative.
 		})
 	}
 
-	stacks, err := s.stacks.List(workspaceID)
-	if err != nil {
-		return nil, fmt.Errorf("snapshot stacks: %w", err)
-	}
 	for i := range stacks {
 		set.Add(declarative.Resource{
 			APIVersion: declarative.APIVersion, Kind: declarative.KindStack,
@@ -2487,10 +2498,15 @@ func (s *Service) applyApplication(ctx context.Context, workspaceID uint, ch dec
 	if err != nil {
 		return err
 	}
+	stackID, err := s.resolveStack(workspaceID, ch.Name, spec)
+	if err != nil {
+		return err
+	}
 	switch ch.Action {
 	case declarative.ActionCreate:
 		in := s.createInput(ctx, desired.Metadata, spec)
 		in.RegistryID = regID
+		in.StackID = stackID
 		target, err := s.placeApp(ctx, workspaceID, ch.Name, spec, refs)
 		if err != nil {
 			return err
@@ -2592,6 +2608,12 @@ func (s *Service) applyApplication(ctx context.Context, workspaceID uint, ch dec
 		if spec.Update() != nil {
 			app.UpdateConfig = updateConfigOf(spec)
 		}
+		// Only when stated, like deployment: a manifest silent about the stack leaves a membership set
+		// in the console alone.
+		if stackID != nil {
+			app.StackID = stackID
+		}
+		app.Stack = nil // a preloaded association would be saved back over StackID
 		if err := s.apps.Update(app); err != nil {
 			return err
 		}
@@ -2621,6 +2643,19 @@ func (s *Service) applyApplication(ctx context.Context, workspaceID uint, ch dec
 		return s.apps.Delete(ctx, app)
 	}
 	return nil
+}
+
+// resolveStack maps an application's spec.stack to the stack's id, or nil when it names none. The Stack
+// is in the same bundle (validation requires it) and ranks before applications, so it exists by now.
+func (s *Service) resolveStack(workspaceID uint, appName string, spec *declarative.ApplicationSpec) (*uint, error) {
+	if spec == nil || spec.Stack == "" {
+		return nil, nil
+	}
+	st, err := s.findStack(workspaceID, spec.Stack)
+	if err != nil {
+		return nil, fmt.Errorf("%w: application %q: %v", ErrInvalidManifest, appName, err)
+	}
+	return &st.ID, nil
 }
 
 // resolveRegistry maps an application's spec.registry to the id of the workspace credential it names, or nil for
