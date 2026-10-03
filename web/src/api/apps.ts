@@ -91,7 +91,6 @@ export interface CreateAppInput extends AppRuntimeInput {
 }
 
 export interface UpdateAppInput extends AppResourceInput, AppRuntimeInput {
-  name?: string
   image?: string
   tag?: string
   git_repo?: string
