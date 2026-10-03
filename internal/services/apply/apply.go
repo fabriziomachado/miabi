@@ -1410,6 +1410,15 @@ func trimDefaults(a *declarative.ApplicationSpec, defaultLocation string) {
 			a.Placement = nil
 		}
 	}
+	if hc := a.Healthcheck; hc != nil {
+		if hc.Type == string(models.HealthcheckNone) {
+			a.Healthcheck = nil
+		} else {
+			hc.IntervalSeconds = trimDefault(hc.IntervalSeconds, 30)
+			hc.TimeoutSeconds = trimDefault(hc.TimeoutSeconds, 5)
+			hc.Retries = trimDefault(hc.Retries, 3)
+		}
+	}
 	if d := a.Deployment; d != nil {
 		if d.Runtime == string(models.RuntimeContainer) {
 			d.Runtime = ""
@@ -1751,6 +1760,7 @@ func appResource(app *models.Application, ext, pub map[int]bool, volNameByID, re
 		ExternalLabel:   app.ExternalLabel,
 		Security:        securitySpecOf(app),
 		Deployment:      deploymentSpecOf(app),
+		Healthcheck:     healthcheckSpecOf(app),
 	}
 	// A git app is described by what it builds, not by the image that build produced: the image ref
 	// carries a generated tag that means nothing in a manifest, and re-applying it elsewhere would
@@ -2569,6 +2579,7 @@ func (s *Service) applyApplication(ctx context.Context, workspaceID uint, ch dec
 		if s := spec.Strategy(); s != "" {
 			app.DeployStrategy = models.DeployStrategy(s)
 		}
+		applyHealthcheck(app, spec.Healthcheck)
 		if rt := spec.Runtime(); rt != "" {
 			app.RuntimeKind = models.RuntimeKind(rt)
 		}
@@ -2757,6 +2768,7 @@ func (s *Service) createInput(ctx context.Context, m declarative.Meta, spec *dec
 		AddCapabilities: spec.AddCapabilities(), // allow-listed + gated in the app service
 		Devices:         spec.Devices(),
 		DeployStrategy:  models.DeployStrategy(spec.Strategy()),
+		Healthcheck:     healthcheckInput(spec.Healthcheck),
 
 		DropCapabilities:       spec.DropCapabilities(),
 		ReadOnlyRootFilesystem: spec.ReadOnlyRootFilesystem(),
@@ -3011,6 +3023,69 @@ func securitySpecOf(app *models.Application) *declarative.SecuritySpec {
 		return nil
 	}
 	return sec
+}
+
+// healthcheckSpecOf states every field, so whatever a manifest states diffs against the live value; an
+// export trims the defaults back out.
+func healthcheckSpecOf(app *models.Application) *declarative.HealthcheckSpec {
+	t := app.HealthcheckType
+	if t == "" {
+		t = models.HealthcheckNone
+	}
+	return &declarative.HealthcheckSpec{
+		Type: string(t), Path: app.HealthcheckHTTPPath, Port: app.HealthcheckPort, Command: app.HealthcheckCommand,
+		IntervalSeconds: app.HealthcheckIntervalSeconds, TimeoutSeconds: app.HealthcheckTimeoutSeconds,
+		Retries: app.HealthcheckRetries, StartPeriodSeconds: app.HealthcheckStartPeriodSeconds,
+	}
+}
+
+// healthcheckInput is a new app's probe from its manifest; nil when the manifest states none.
+func healthcheckInput(hc *declarative.HealthcheckSpec) *application.Healthcheck {
+	if hc == nil {
+		return nil
+	}
+	return &application.Healthcheck{
+		Type: models.HealthcheckType(hc.Type), Path: hc.Path, Port: hc.Port, Command: hc.Command,
+		IntervalSeconds: hc.IntervalSeconds, TimeoutSeconds: hc.TimeoutSeconds,
+		Retries: hc.Retries, StartPeriodSeconds: hc.StartPeriodSeconds,
+	}
+}
+
+// applyHealthcheck writes only the fields a manifest states, matching the diff, so a bundle stating
+// type and path leaves the timing set in the console alone.
+func applyHealthcheck(app *models.Application, hc *declarative.HealthcheckSpec) {
+	if hc == nil {
+		return
+	}
+	app.HealthcheckType = models.HealthcheckType(hc.Type)
+	if hc.Path != "" {
+		app.HealthcheckHTTPPath = hc.Path
+	}
+	if hc.Port > 0 {
+		app.HealthcheckPort = hc.Port
+	}
+	if hc.Command != "" {
+		app.HealthcheckCommand = hc.Command
+	}
+	if hc.IntervalSeconds > 0 {
+		app.HealthcheckIntervalSeconds = hc.IntervalSeconds
+	}
+	if hc.TimeoutSeconds > 0 {
+		app.HealthcheckTimeoutSeconds = hc.TimeoutSeconds
+	}
+	if hc.Retries > 0 {
+		app.HealthcheckRetries = hc.Retries
+	}
+	if hc.StartPeriodSeconds > 0 {
+		app.HealthcheckStartPeriodSeconds = hc.StartPeriodSeconds
+	}
+}
+
+func trimDefault(v, def int) int {
+	if v == def {
+		return 0
+	}
+	return v
 }
 
 // deploymentSpecOf always states the runtime and strategy, so a manifest naming the default still diffs

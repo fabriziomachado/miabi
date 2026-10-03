@@ -256,6 +256,8 @@ func enumFor(typeName, field string) []string {
 		return sortedKeys(validStrategy)
 	case "DeploymentSpec.Runtime":
 		return []string{"container", "service"}
+	case "HealthcheckSpec.Type":
+		return sortedKeys(validHealthcheckType)
 	case "ApplicationSpec.ReloadPolicy":
 		return []string{ReloadRestart, ReloadNone}
 	case "PortSpec.Protocol":

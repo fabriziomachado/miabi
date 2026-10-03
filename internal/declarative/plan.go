@@ -293,6 +293,9 @@ var optionalWhenUnset = map[string]bool{
 	"placement.location": true, "placement.constraints": true,
 	"deployment.strategy": true, "deployment.runtime": true, "deployment.replicas": true,
 	"deployment.update.parallelism": true, "deployment.update.delaySeconds": true,
+	"healthcheck.type": true, "healthcheck.path": true, "healthcheck.port": true, "healthcheck.command": true,
+	"healthcheck.intervalSeconds": true, "healthcheck.timeoutSeconds": true, "healthcheck.retries": true,
+	"healthcheck.startPeriodSeconds": true,
 }
 
 // optionalWhenUnsetByKind holds the fields compared only when stated for one kind alone. A database's limits may
@@ -483,6 +486,23 @@ func specFields(r Resource) map[string]string {
 		if u := a.Update(); u != nil {
 			f["deployment.update.parallelism"] = strconv.Itoa(u.Parallelism)
 			f["deployment.update.delaySeconds"] = strconv.Itoa(u.DelaySeconds)
+		}
+		// Only the stated fields are compared, like deployment: a check set in the console survives a
+		// manifest silent about it, and a manifest stating only type and path leaves the timing alone.
+		if hc := a.Healthcheck; hc != nil {
+			f["healthcheck.type"] = hc.Type
+			setIf := func(k, v string, stated bool) {
+				if stated {
+					f["healthcheck."+k] = v
+				}
+			}
+			setIf("path", hc.Path, hc.Path != "")
+			setIf("port", strconv.Itoa(hc.Port), hc.Port > 0)
+			setIf("command", hc.Command, hc.Command != "")
+			setIf("intervalSeconds", strconv.Itoa(hc.IntervalSeconds), hc.IntervalSeconds > 0)
+			setIf("timeoutSeconds", strconv.Itoa(hc.TimeoutSeconds), hc.TimeoutSeconds > 0)
+			setIf("retries", strconv.Itoa(hc.Retries), hc.Retries > 0)
+			setIf("startPeriodSeconds", strconv.Itoa(hc.StartPeriodSeconds), hc.StartPeriodSeconds > 0)
 		}
 		// Mounted config content is not visible in any diffed field, so its
 		// fingerprint is what makes an edit converge as an application update.

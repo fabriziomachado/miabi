@@ -671,6 +671,13 @@ func (s *Service) createApp(workspaceID uint, m *manifest.Manifest, spec manifes
 		in.MemoryBytes, _ = spec.Resources.MemoryBytes()
 		in.NanoCPUs, _ = spec.Resources.NanoCPUs()
 	}
+	if hc := spec.Healthcheck; hc != nil {
+		in.Healthcheck = &application.Healthcheck{
+			Type: models.HealthcheckType(hc.Type), Path: hc.Path, Port: hc.Port, Command: hc.Command,
+			IntervalSeconds: hc.IntervalSeconds, TimeoutSeconds: hc.TimeoutSeconds,
+			Retries: hc.Retries, StartPeriodSeconds: hc.StartPeriodSeconds,
+		}
+	}
 	return s.apps.Create(workspaceID, in)
 }
 
