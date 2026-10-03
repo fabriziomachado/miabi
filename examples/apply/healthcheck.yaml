@@ -1,0 +1,78 @@
+# Probing an application's health, so a deploy only goes live once the new release
+# answers. A rolling deploy starts the new container, waits for it to report healthy,
+# and only then moves traffic and retires the old one; a release that never turns
+# healthy fails the deploy and the running one keeps serving.
+#
+# `spec.healthcheck.type` is one of:
+#
+#   http     GET `path` on `port` (default: the app's first port). Healthy on 2xx/3xx.
+#            Works in any image, including distroless and scratch ones without a shell.
+#   command  Run `command` in the container. Healthy on exit code 0. Needs a shell in
+#            the image.
+#   none     No check: the deploy goes live as soon as the container is running.
+#
+# Timing, with the defaults a new app gets:
+#
+#   intervalSeconds: 30     time between probes
+#   timeoutSeconds: 5       a probe slower than this counts as a failure
+#   retries: 3              consecutive failures before the container is unhealthy
+#   startPeriodSeconds: 0   grace period after start; failures in it don't count
+#
+# Only the fields a manifest states are applied. Leave the block out and the app keeps
+# whatever check it has (set in the console, say); state just `type` and `path` and the
+# timing stays as it is. `type: none` turns a check off.
+#
+#   miabi apply -f healthcheck.yaml
+---
+# An HTTP check on a dedicated endpoint. The guestbook's /healthz returns 503 until
+# its database is reachable, so traffic waits for the database too.
+apiVersion: miabi.io/v1
+kind: Application
+metadata:
+  name: guestbook
+spec:
+  image: miabi/guestbook
+  tag: "3.0.0"
+  ports:
+    - container: 8080
+      externalAccess: true
+  deployment:
+    strategy: rolling
+  healthcheck:
+    type: http
+    path: /healthz
+    port: 8080
+    intervalSeconds: 10
+---
+# A slow starter: a JVM app that takes a minute to warm up. The start period keeps
+# early failures from marking it unhealthy before it is ready.
+apiVersion: miabi.io/v1
+kind: Application
+metadata:
+  name: billing
+spec:
+  image: ghcr.io/acme/billing
+  tag: "4.2.0"
+  ports:
+    - container: 8080
+  healthcheck:
+    type: http
+    path: /actuator/health
+    startPeriodSeconds: 60
+    timeoutSeconds: 10
+---
+# A command check, for a process that serves no HTTP. The command runs inside the
+# container through its shell.
+apiVersion: miabi.io/v1
+kind: Application
+metadata:
+  name: worker
+spec:
+  image: ghcr.io/acme/worker
+  tag: "1.8.0"
+  command: ["worker", "--queue", "default"]
+  healthcheck:
+    type: command
+    command: test -f /tmp/worker.alive
+    intervalSeconds: 15
+    retries: 2

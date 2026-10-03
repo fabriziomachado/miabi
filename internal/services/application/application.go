@@ -132,7 +132,9 @@ type CreateInput struct {
 	DropCapabilities       []string
 	// DeployStrategy is the app's default rollout method. Empty leaves the model's
 	// own default (rolling), so a caller that does not care says nothing.
-	DeployStrategy  models.DeployStrategy
+	DeployStrategy models.DeployStrategy
+	// Healthcheck is the container health probe; nil leaves none. Zero timing fields take the defaults.
+	Healthcheck     *Healthcheck
 	RestartPolicy   models.RestartPolicy
 	ImagePullPolicy models.ImagePullPolicy
 	// Cluster runtime (cluster mode). RuntimeKind defaults to container; service
@@ -480,6 +482,24 @@ func (s *Service) ResourceLimits() (maxCPUCores, maxMemoryMB int) {
 		return 0, 0
 	}
 	return s.settings.Int(settings.KeyMaxCPUCores, 0), s.settings.Int(settings.KeyMaxMemoryMB, 0)
+}
+
+// Healthcheck is an app's container health probe, as a create caller states it.
+type Healthcheck struct {
+	Type                                                               models.HealthcheckType
+	Path, Command                                                      string
+	Port, IntervalSeconds, TimeoutSeconds, Retries, StartPeriodSeconds int
+}
+
+// applyTo copies the probe onto the app, then fills the defaults for the timing left unset.
+func (h *Healthcheck) applyTo(app *models.Application) {
+	if h == nil {
+		return
+	}
+	app.HealthcheckType, app.HealthcheckHTTPPath, app.HealthcheckPort, app.HealthcheckCommand = h.Type, h.Path, h.Port, h.Command
+	app.HealthcheckIntervalSeconds, app.HealthcheckTimeoutSeconds = h.IntervalSeconds, h.TimeoutSeconds
+	app.HealthcheckRetries, app.HealthcheckStartPeriodSeconds = h.Retries, h.StartPeriodSeconds
+	normalizeHealthcheck(app)
 }
 
 func normalizeHealthcheck(app *models.Application) {
@@ -1023,6 +1043,7 @@ func (s *Service) Create(workspaceID uint, in CreateInput) (*models.Application,
 		Annotations:            in.Annotations,
 		ContainerLabels:        docker.SanitizeUserLabels(in.ContainerLabels),
 	}
+	in.Healthcheck.applyTo(app)
 	normalizeRuntime(app)
 	// In cluster mode, default a caller-unspecified runtime to a replicated Swarm service for interactive creates
 	// only; declarative sources stay deterministic. normalizeRuntime has already turned an unspecified kind into

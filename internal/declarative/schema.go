@@ -124,6 +124,10 @@ type ApplicationSpec struct {
 	// Security is the account the container runs as, the hardening it runs with and the kernel privileges
 	// it is granted, checked on apply the way the console checks them.
 	Security *SecuritySpec `yaml:"security,omitempty" json:"security,omitempty"`
+	// Healthcheck is how the container's health is probed. A deploy waits for it to report healthy before
+	// the new release goes live, so a broken release never replaces a working one. Omitted, the app keeps
+	// the check it has, so one configured in the console is not undone.
+	Healthcheck *HealthcheckSpec `yaml:"healthcheck,omitempty" json:"healthcheck,omitempty"`
 	// ContainerLabels are user-defined Docker labels stamped on the app's container(s), for
 	// label-driven tools like Traefik. Reserved keys (io.miabi.*, com.docker.*) are stripped on apply
 	// — a manifest is machine-authored, so import is fail-soft rather than erroring.
@@ -182,6 +186,25 @@ type DeploymentSpec struct {
 type UpdateSpec struct {
 	Parallelism  int `yaml:"parallelism,omitempty" json:"parallelism,omitempty"`
 	DelaySeconds int `yaml:"delaySeconds,omitempty" json:"delaySeconds,omitempty"`
+}
+
+// HealthcheckSpec is how a container's health is probed. Only the fields stated are applied; the rest keep
+// their current value (interval 30s, timeout 5s, 3 retries and no start period on a new app).
+type HealthcheckSpec struct {
+	// Type is http (GET path on port, healthy on 2xx/3xx), command (run command in the container, healthy
+	// on exit 0) or none (no check).
+	Type string `yaml:"type" json:"type"`
+	// Path is the URL path an http check requests, e.g. /healthz.
+	Path string `yaml:"path,omitempty" json:"path,omitempty"`
+	// Port is the container port an http check probes. Omitted, the app's first port.
+	Port int `yaml:"port,omitempty" json:"port,omitempty"`
+	// Command is the shell command a command check runs, e.g. pg_isready. It needs a shell in the image;
+	// an http check does not.
+	Command            string `yaml:"command,omitempty" json:"command,omitempty"`
+	IntervalSeconds    int    `yaml:"intervalSeconds,omitempty" json:"intervalSeconds,omitempty"`
+	TimeoutSeconds     int    `yaml:"timeoutSeconds,omitempty" json:"timeoutSeconds,omitempty"`
+	Retries            int    `yaml:"retries,omitempty" json:"retries,omitempty"`
+	StartPeriodSeconds int    `yaml:"startPeriodSeconds,omitempty" json:"startPeriodSeconds,omitempty"`
 }
 
 // PlacementSpec is where a stack or volume is created.

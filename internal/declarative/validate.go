@@ -212,6 +212,30 @@ var validHTTPMethod = map[string]bool{
 // declarative package keeps its one dependency; a test asserts the two lists agree.
 var validStrategy = map[string]bool{"recreate": true, "rolling": true, "canary": true}
 
+var validHealthcheckType = map[string]bool{"none": true, "http": true, "command": true}
+
+func validateHealthcheck(hc *HealthcheckSpec) error {
+	if hc == nil {
+		return nil
+	}
+	if !validHealthcheckType[hc.Type] {
+		return fmt.Errorf("healthcheck.type %q must be http, command or none", hc.Type)
+	}
+	if hc.Type == "command" && strings.TrimSpace(hc.Command) == "" {
+		return fmt.Errorf("healthcheck.command is required when healthcheck.type is command")
+	}
+	if hc.Path != "" && !strings.HasPrefix(hc.Path, "/") {
+		return fmt.Errorf("healthcheck.path %q must start with /", hc.Path)
+	}
+	if hc.Port < 0 || hc.Port > 65535 {
+		return fmt.Errorf("healthcheck.port %d must be between 1 and 65535", hc.Port)
+	}
+	if hc.IntervalSeconds < 0 || hc.TimeoutSeconds < 0 || hc.Retries < 0 || hc.StartPeriodSeconds < 0 {
+		return fmt.Errorf("healthcheck intervals and retries cannot be negative")
+	}
+	return nil
+}
+
 var constraintRe = regexp.MustCompile(`^[A-Za-z0-9_.-]+\s*(==|!=)\s*[^\s=!].*$`)
 
 // validateRuntime refuses service settings on a container rather than ignoring them: a manifest
@@ -375,6 +399,9 @@ func (r *Resource) validateApplication() error {
 		if _, err := models.NormalizeDevices(a.Devices()); err != nil {
 			return fmt.Errorf("application %q: %w", r.Metadata.Name, err)
 		}
+	}
+	if err := validateHealthcheck(a.Healthcheck); err != nil {
+		return fmt.Errorf("application %q: %w", r.Metadata.Name, err)
 	}
 	if a.ExternalLabel != "" && !nameRe.MatchString(a.ExternalLabel) {
 		return fmt.Errorf("application %q: externalLabel %q must be a DNS label", r.Metadata.Name, a.ExternalLabel)
