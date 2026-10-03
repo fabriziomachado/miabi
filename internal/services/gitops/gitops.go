@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/jkaninda/logger"
 	"github.com/miabi-io/miabi/internal/declarative"
@@ -362,6 +361,33 @@ type commitInfo struct {
 	Subject string
 }
 
+// defaultRef is what a source saved without a ref is stored as.
+const defaultRef = "main"
+
+// checkoutRef moves a fresh clone to ref. A repository without a "main" branch keeps syncing its
+// default branch on the defaultRef, since that ref may only be the stored default for a blank one.
+func checkoutRef(repo *git.Repository, ref string) error {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil
+	}
+	hash, err := gitrepo.ResolveRef(repo, ref)
+	if err != nil {
+		if ref == defaultRef {
+			return nil
+		}
+		return fmt.Errorf("resolve ref %q: %w", ref, err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return err
+	}
+	if err := wt.Checkout(&git.CheckoutOptions{Hash: *hash}); err != nil {
+		return fmt.Errorf("checkout %q: %w", ref, err)
+	}
+	return nil
+}
+
 // fetch clones the repo at the source's ref into a temp dir and parses the manifests under its path,
 // returning the rendered manifest bundle and the resolved commit (hash, author, subject). The bundle is
 // the concatenation of all manifest files; the apply engine re-parses it as one set.
@@ -380,18 +406,8 @@ func (s *Service) fetch(ctx context.Context, src *models.GitSource) ([]byte, com
 	if err != nil {
 		return nil, commitInfo{}, fmt.Errorf("git clone: %w", err)
 	}
-	if ref := src.Ref; ref != "" && ref != "main" {
-		hash, err := repo.ResolveRevision(plumbing.Revision(ref))
-		if err != nil {
-			return nil, commitInfo{}, fmt.Errorf("resolve ref %q: %w", ref, err)
-		}
-		wt, err := repo.Worktree()
-		if err != nil {
-			return nil, commitInfo{}, err
-		}
-		if err := wt.Checkout(&git.CheckoutOptions{Hash: *hash}); err != nil {
-			return nil, commitInfo{}, fmt.Errorf("checkout %q: %w", ref, err)
-		}
+	if err := checkoutRef(repo, src.Ref); err != nil {
+		return nil, commitInfo{}, err
 	}
 	var ci commitInfo
 	if head, err := repo.Head(); err == nil {
@@ -481,7 +497,7 @@ func (in *Input) normalize() {
 	in.Ref = strings.TrimSpace(in.Ref)
 	in.Path = strings.TrimSpace(in.Path)
 	if in.Ref == "" {
-		in.Ref = "main"
+		in.Ref = defaultRef
 	}
 	if in.Path == "" {
 		in.Path = "."

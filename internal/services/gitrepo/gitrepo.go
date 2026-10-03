@@ -402,7 +402,7 @@ func Checkout(ctx context.Context, dir, url, ref string, auth transport.AuthMeth
 		}
 		return head.Hash().String(), nil
 	}
-	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	hash, err := ResolveRef(repo, ref)
 	if err != nil {
 		return "", fmt.Errorf("resolve ref %q: %w", ref, err)
 	}
@@ -537,4 +537,18 @@ func normalizeGitURL(raw string) string {
 		u += ".git"
 	}
 	return u
+}
+
+// ResolveRef resolves a branch, tag or commit in a fresh clone. A clone has a local branch only for
+// the default one; every other branch exists as origin/<name>, so a bare name is tried there too.
+func ResolveRef(repo *gogit.Repository, ref string) (*plumbing.Hash, error) {
+	ref = strings.TrimSpace(ref)
+	hash, err := repo.ResolveRevision(plumbing.Revision(ref))
+	if err == nil {
+		return hash, nil
+	}
+	if h, rerr := repo.ResolveRevision(plumbing.Revision("origin/" + strings.TrimPrefix(ref, "refs/heads/"))); rerr == nil {
+		return h, nil
+	}
+	return nil, err
 }
