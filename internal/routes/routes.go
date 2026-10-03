@@ -1241,7 +1241,7 @@ func InitRoutes(app *okapi.Okapi, db *gorm.DB, redisClient *redis.Client, cfg *c
 		}
 	}
 
-	jwtAuth := middlewares.JWTAuth(cfg, sessionStore)
+	jwtAuth := middlewares.JWTAuth(cfg, sessionStore, userRepo)
 
 	// Platform announcements deliver into the same per-user inbox the alerting
 	// engine writes to, so the bell, the SSE stream and the notifications page need

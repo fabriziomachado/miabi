@@ -422,6 +422,9 @@ func (h *AdminUserHandler) Update(c *okapi.Context, req *AdminUpdateUserRequest)
 	}
 	// Disabling an account stops all of its apps and databases (best-effort; the
 	// account is already deactivated regardless of stop outcomes).
+	if wasActive && !target.Active {
+		h.revokeAll(c, target.ID)
+	}
 	if wasActive && !target.Active && h.account != nil {
 		res := h.account.StopOwned(c.Request().Context(), target.ID)
 		h.record(c, "admin.user.disable", target.ID, map[string]any{"apps_stopped": res.Apps, "databases_stopped": res.Databases})

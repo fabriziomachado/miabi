@@ -30,6 +30,15 @@ func (r *SessionRepository) RevokeByJTI(jti string) error {
 	return r.db.Model(&models.Session{}).Where("jti = ?", jti).Update("revoked", true).Error
 }
 
+// RevokeAllForUser marks every session of a user revoked, except the one with exceptJTI (empty for all).
+func (r *SessionRepository) RevokeAllForUser(userID uint, exceptJTI string) error {
+	q := r.db.Model(&models.Session{}).Where("user_id = ? AND revoked = ?", userID, false)
+	if exceptJTI != "" {
+		q = q.Where("jti <> ?", exceptJTI)
+	}
+	return q.Update("revoked", true).Error
+}
+
 func (r *SessionRepository) ListByUser(userID uint) ([]models.Session, error) {
 	var sessions []models.Session
 	err := r.db.Where("user_id = ?", userID).Order("created_at DESC").Find(&sessions).Error

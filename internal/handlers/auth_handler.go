@@ -463,6 +463,7 @@ func (h *AuthHandler) CompletePasswordReset(c *okapi.Context, req *CompletePassw
 	user.LastLoginAt = &now
 	_ = h.users.Update(user)
 	h.audit.Record(audit.Entry{ActorID: &user.ID, Action: "user.password_changed", TargetType: "user", IP: c.RealIP(), Metadata: map[string]any{"forced": true}})
+	h.revokeSessions(c, user.ID)
 	return h.issue(c, user, 200)
 }
 
@@ -737,9 +738,11 @@ func (h *AuthHandler) ForgotPassword(c *okapi.Context, req *ForgotPasswordReques
 
 // ResetPassword consumes a reset token and sets a new password.
 func (h *AuthHandler) ResetPassword(c *okapi.Context, req *ResetPasswordRequest) error {
-	if err := h.auth.ResetPassword(req.Body.Token, req.Body.Password); err != nil {
+	uid, err := h.auth.ResetPassword(req.Body.Token, req.Body.Password)
+	if err != nil {
 		return c.AbortBadRequest("invalid or expired reset token")
 	}
+	h.revokeSessions(c, uid)
 	return message(c, "password updated")
 }
 
@@ -754,7 +757,31 @@ func (h *AuthHandler) ChangePassword(c *okapi.Context, req *ChangePasswordReques
 		return c.AbortInternalServerError("failed to change password", err)
 	}
 	h.audit.Record(audit.Entry{ActorID: &uid, Action: "user.password_changed", TargetType: "user", IP: c.RealIP()})
-	return message(c, "password changed")
+	// Every session ended with the old password, this one included; a fresh one keeps the user signed in
+	// here while everywhere else is signed out.
+	h.revokeSessions(c, uid)
+	user, err := h.users.FindByID(uid)
+	if err != nil {
+		return c.AbortNotFound("user not found")
+	}
+	return h.issue(c, user, 200)
+}
+
+// revokeSessions ends every recorded session of a user, so the sessions list matches what the
+// middleware already enforces after a password change.
+func (h *AuthHandler) revokeSessions(c *okapi.Context, userID uint) {
+	sessions, err := h.sessions.ListByUser(userID)
+	if err != nil {
+		return
+	}
+	ctx := c.Request().Context()
+	for _, s := range sessions {
+		if s.Revoked || time.Now().After(s.ExpiresAt) {
+			continue
+		}
+		h.auth.Revoke(ctx, s.JTI)
+	}
+	_ = h.sessions.RevokeAllForUser(userID, "")
 }
 
 // UpdateProfile lets an authenticated user edit their own profile — the display

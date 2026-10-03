@@ -87,8 +87,9 @@ export const authApi = {
   revokeOtherSessions() {
     return api.post<ApiResponse<{ message: string; revoked: number }>>('/me/sessions/revoke-others')
   },
+  // Returns a fresh session: the change signs out every other one, and the new cookie keeps this one.
   changePassword(currentPassword: string, newPassword: string) {
-    return api.post<ApiResponse<{ message: string }>>('/auth/change-password', {
+    return api.post<ApiResponse<AuthResponse>>('/auth/change-password', {
       current_password: currentPassword,
       new_password: newPassword,
     })
