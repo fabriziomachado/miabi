@@ -242,8 +242,8 @@ jobs:
           BRANCH="release/${GITHUB_REF_NAME}"
           VERSION="${GITHUB_REF_NAME#v}"
 
-          git config user.name  "miabi-bot"
-          git config user.email "bot@miabi.io"
+          git config user.name  "akili-agent"
+          git config user.email "agent@goakili.dev"
 
           # -B and --force so re-running the workflow overwrites the branch instead of
           # failing on one that already exists. --force-with-lease is the usual reflex,
