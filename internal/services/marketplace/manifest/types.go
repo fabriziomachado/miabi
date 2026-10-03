@@ -191,7 +191,7 @@ type Resources struct {
 
 // Healthcheck mirrors the application healthcheck options.
 type Healthcheck struct {
-	Type               string `yaml:"type,omitempty" json:"type,omitempty"` // none | http | command
+	Type               string `yaml:"type,omitempty" json:"type,omitempty"` // image (default) | none | http | command
 	Path               string `yaml:"path,omitempty" json:"path,omitempty"`
 	Command            string `yaml:"command,omitempty" json:"command,omitempty"`
 	Port               int    `yaml:"port,omitempty" json:"port,omitempty"`

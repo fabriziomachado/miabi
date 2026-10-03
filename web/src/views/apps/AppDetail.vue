@@ -517,7 +517,7 @@ function emptySettingsForm(): SettingsForm {
     cpu_cores: 0, memory_mb: 0, gpu_count: 0, gpu_kind: '', run_as_user: '', add_capabilities: [], devices: [], restart_policy: 'unless-stopped', image_pull_policy: 'always',
     reconcile_policy: 'inherit',
     read_only_root_filesystem: false, no_new_privileges: false, drop_capabilities: '',
-    hc_type: 'none', hc_path: '/', hc_port: null, hc_command: '', hc_interval: 30, hc_timeout: 5, hc_retries: 3, hc_start_period: 0,
+    hc_type: 'image', hc_path: '/', hc_port: null, hc_command: '', hc_interval: 30, hc_timeout: 5, hc_retries: 3, hc_start_period: 0,
   }
 }
 const settingsForm = ref<SettingsForm>(emptySettingsForm())
@@ -633,6 +633,7 @@ function splitCommand(s: string): string[] {
 }
 
 const HEALTHCHECK_TYPES: { value: HealthcheckType; label: string }[] = [
+  { value: 'image', label: 'appDetail.hc.image' },
   { value: 'none', label: 'appDetail.hc.none' },
   { value: 'http', label: 'appDetail.hc.http' },
   { value: 'command', label: 'appDetail.hc.command' },
@@ -954,7 +955,7 @@ function syncSettingsForm() {
     restart_policy: app.value.restart_policy || 'unless-stopped',
     image_pull_policy: app.value.image_pull_policy || 'always',
     reconcile_policy: app.value.reconcile_policy || 'inherit',
-    hc_type: app.value.healthcheck_type || 'none',
+    hc_type: app.value.healthcheck_type || 'image',
     hc_path: app.value.healthcheck_http_path || '/',
     hc_port: app.value.healthcheck_port || null,
     hc_command: app.value.healthcheck_command || '',
@@ -3601,7 +3602,9 @@ async function detachDatabase(d: AppDatabase) {
             <select v-model="settingsForm.hc_type" class="form-select" :disabled="!ws.canEdit">
               <option v-for="item in HEALTHCHECK_TYPES" :key="item.value" :value="item.value">{{ $t(item.label) }}</option>
             </select>
-            <p class="form-hint">{{ $t('appDetail.settings.waitHealthyHint') }}</p>
+            <p v-if="settingsForm.hc_type === 'image'" class="form-hint">{{ $t('appDetail.settings.imageProbeHint') }}</p>
+            <p v-else-if="settingsForm.hc_type === 'none'" class="form-hint">{{ $t('appDetail.settings.noneProbeHint') }}</p>
+            <p v-else class="form-hint">{{ $t('appDetail.settings.waitHealthyHint') }}</p>
           </div>
           <template v-if="settingsForm.hc_type === 'http'">
             <div class="form-row">
@@ -3614,17 +3617,14 @@ async function detachDatabase(d: AppDatabase) {
                 <input v-model.number="settingsForm.hc_port" type="number" class="form-input" :placeholder="String(app.port || 80)" :disabled="!ws.canEdit" />
               </div>
             </div>
-            <i18n-t keypath="appDetail.settings.httpProbeHint" tag="p" class="form-hint" style="margin-top: -8px; margin-bottom: 16px">
-              <template #curl><code>curl</code></template>
-              <template #wget><code>wget</code></template>
-            </i18n-t>
+            <p class="form-hint" style="margin-top: -8px; margin-bottom: 16px">{{ $t('appDetail.settings.httpProbeHint') }}</p>
           </template>
           <div v-else-if="settingsForm.hc_type === 'command'" class="form-group">
             <label class="form-label">{{ $t('appDetail.command') }}</label>
             <input v-model="settingsForm.hc_command" class="form-input mono" placeholder="pg_isready -U postgres" :disabled="!ws.canEdit" />
             <p class="form-hint">{{ $t('appDetail.settings.cmdProbeHint') }}</p>
           </div>
-          <template v-if="settingsForm.hc_type !== 'none'">
+          <template v-if="settingsForm.hc_type === 'http' || settingsForm.hc_type === 'command'">
             <div class="form-row">
               <div class="form-group" style="flex: 1">
                 <label class="form-label">{{ $t('appDetail.intervalS') }}</label>

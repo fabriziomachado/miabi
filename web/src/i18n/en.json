@@ -413,7 +413,8 @@
     "hc": {
       "command": "Command",
       "http": "HTTP",
-      "none": "None"
+      "none": "None",
+      "image": "Image default"
     },
     "health": "Health",
     "healthcheck": "Healthcheck",
@@ -597,7 +598,7 @@
       "gpuFilterHint": "Narrow to a vendor/model (e.g. {vendor}). Empty = any enabled GPU on the node.",
       "gpuHint": "Whole GPU devices to attach. 0 = none. Counts against the plan’s GPU quota while running.",
       "hostMountsHint": "Bind allow-listed host paths into this app. These grant host-level access — attach only what the app truly needs.",
-      "httpProbeHint": "Uses {curl} (or {wget}) inside the container — the image must include one.",
+      "httpProbeHint": "Miabi copies a small probe into the container, so the image needs no curl or wget. A replicated service uses the image's curl, wget or bash instead.",
       "needsDeveloper": "You need developer access to edit settings.",
       "noNewPrivilegesHint": "Stops processes gaining privileges through setuid binaries, like {flag}.",
       "noRepoPipelineHint": "This app builds directly. If you have added a {file} to the repository, re-sync to adopt it.",
@@ -629,7 +630,9 @@
       "switchToImageBody": "The repository, branch and build settings will be cleared, and the app needs a redeploy to run from the new source.",
       "switchToImageTitle": "Switching to a Docker image.",
       "templateImageWarning": "Changing the image here means it no longer matches the template, and a future template upgrade may overwrite it.",
-      "waitHealthyHint": "Deploys wait for the container to report healthy before going live."
+      "waitHealthyHint": "Deploys wait for the container to report healthy before going live.",
+      "imageProbeHint": "Uses the image's own HEALTHCHECK, if it declares one. Deploys don't wait for it.",
+      "noneProbeHint": "No check at all: the image's own HEALTHCHECK is turned off too. Use it for workers and schedulers that serve no HTTP."
     },
     "shell": "Shell",
     "source": {

@@ -502,7 +502,7 @@ func (h *Healthcheck) applyTo(app *models.Application) {
 
 func normalizeHealthcheck(app *models.Application) {
 	if !models.ValidHealthcheckType(app.HealthcheckType) {
-		app.HealthcheckType = models.HealthcheckNone
+		app.HealthcheckType = models.HealthcheckImage
 	}
 	if app.HealthcheckIntervalSeconds < 1 {
 		app.HealthcheckIntervalSeconds = 30
@@ -1042,6 +1042,9 @@ func (s *Service) Create(workspaceID uint, in CreateInput) (*models.Application,
 		ContainerLabels:        docker.SanitizeUserLabels(in.ContainerLabels),
 	}
 	in.Healthcheck.applyTo(app)
+	if app.HealthcheckType == "" {
+		app.HealthcheckType = models.HealthcheckImage
+	}
 	normalizeRuntime(app)
 	// In cluster mode, default a caller-unspecified runtime to a replicated Swarm service for interactive creates
 	// only; declarative sources stay deterministic. normalizeRuntime has already turned an unspecified kind into

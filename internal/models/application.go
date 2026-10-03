@@ -291,15 +291,22 @@ func ValidImagePullPolicy(p ImagePullPolicy) bool {
 type HealthcheckType string
 
 const (
-	HealthcheckNone    HealthcheckType = "none"    // no healthcheck
+	HealthcheckImage   HealthcheckType = "image"   // the image's own HEALTHCHECK, if it declares one
+	HealthcheckNone    HealthcheckType = "none"    // no check at all, the image's HEALTHCHECK included
 	HealthcheckHTTP    HealthcheckType = "http"    // HTTP GET against a path/port
 	HealthcheckCommand HealthcheckType = "command" // shell command (CMD-SHELL)
 )
 
+// GatesDeploy reports whether a deploy waits for the container to report healthy. An image check
+// does not gate: its timing is the image's, and Docker probes only after a full interval.
+func (t HealthcheckType) GatesDeploy() bool {
+	return t == HealthcheckHTTP || t == HealthcheckCommand
+}
+
 // ValidHealthcheckType reports whether t is a known healthcheck type.
 func ValidHealthcheckType(t HealthcheckType) bool {
 	switch t {
-	case HealthcheckNone, HealthcheckHTTP, HealthcheckCommand:
+	case HealthcheckImage, HealthcheckNone, HealthcheckHTTP, HealthcheckCommand:
 		return true
 	default:
 		return false
@@ -456,10 +463,10 @@ type Application struct {
 	// always (the platform's historical behavior of fetching the tag each deploy).
 	ImagePullPolicy ImagePullPolicy `json:"image_pull_policy" gorm:"not null;default:always"`
 
-	// Healthcheck. none disables it; http probes HealthcheckHTTPPath on HealthcheckPort (0 = the
-	// app's primary port); command runs HealthcheckCommand via the shell. When set, a deploy
-	// waits for the container to report healthy before going live.
-	HealthcheckType               HealthcheckType `json:"healthcheck_type" gorm:"not null;default:none"`
+	// Healthcheck. image (default) keeps the image's own HEALTHCHECK; none disables every check; http
+	// probes HealthcheckHTTPPath on HealthcheckPort (0 = the app's primary port); command runs
+	// HealthcheckCommand via the shell. With http or command a deploy waits for healthy before going live.
+	HealthcheckType               HealthcheckType `json:"healthcheck_type" gorm:"not null;default:image"`
 	HealthcheckHTTPPath           string          `json:"healthcheck_http_path"`
 	HealthcheckPort               int             `json:"healthcheck_port"`
 	HealthcheckCommand            string          `json:"healthcheck_command"`

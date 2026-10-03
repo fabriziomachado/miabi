@@ -67,8 +67,8 @@ func TestCheckResourceCaps(t *testing.T) {
 func TestNormalizeHealthcheck(t *testing.T) {
 	app := &models.Application{HealthcheckType: "bogus", HealthcheckIntervalSeconds: 0, HealthcheckTimeoutSeconds: 0, HealthcheckRetries: 0}
 	normalizeHealthcheck(app)
-	if app.HealthcheckType != models.HealthcheckNone {
-		t.Errorf("invalid type should normalize to none, got %q", app.HealthcheckType)
+	if app.HealthcheckType != models.HealthcheckImage {
+		t.Errorf("invalid type should normalize to image, got %q", app.HealthcheckType)
 	}
 	if app.HealthcheckIntervalSeconds != 30 || app.HealthcheckTimeoutSeconds != 5 || app.HealthcheckRetries != 3 {
 		t.Errorf("timing defaults not applied: %+v", app)

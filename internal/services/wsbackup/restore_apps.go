@@ -127,7 +127,7 @@ func (r *restoreRun) applyApps(ctx context.Context) {
 // finishApp writes the parts of an app's spec that Create does not take, and
 // restores its mounts and environment.
 func (r *restoreRun) finishApp(_ context.Context, app *models.Application, a wsbundle.Application) error {
-	app.HealthcheckType = models.HealthcheckType(a.HealthcheckType)
+	app.HealthcheckType = restoredHealthcheckType(a.HealthcheckType, r.state.Schema)
 	app.HealthcheckHTTPPath = a.HealthcheckHTTPPath
 	app.HealthcheckPort = a.HealthcheckPort
 	app.HealthcheckCommand = a.HealthcheckCommand
@@ -196,3 +196,12 @@ func (r *restoreRun) configByName(name string) (*models.Config, error) {
 
 // errConfigsUnavailable reports an install with no config service wired.
 var errConfigsUnavailable = errors.New("configs are not available on this install")
+
+// restoredHealthcheckType reads a bundled healthcheck type. A bundle written before schema 3 meant
+// "keep the image's own check" by "none", which is "image" now.
+func restoredHealthcheckType(t string, schema int) models.HealthcheckType {
+	if models.HealthcheckType(t) == models.HealthcheckNone && schema < wsbundle.HealthcheckNoneDisables {
+		return models.HealthcheckImage
+	}
+	return models.HealthcheckType(t)
+}

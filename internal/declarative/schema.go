@@ -192,7 +192,7 @@ type UpdateSpec struct {
 // their current value (interval 30s, timeout 5s, 3 retries and no start period on a new app).
 type HealthcheckSpec struct {
 	// Type is http (GET path on port, healthy on 2xx/3xx), command (run command in the container, healthy
-	// on exit 0) or none (no check).
+	// on exit 0), image (the image's own HEALTHCHECK, the default) or none (no check, not even the image's).
 	Type string `yaml:"type" json:"type"`
 	// Path is the URL path an http check requests, e.g. /healthz.
 	Path string `yaml:"path,omitempty" json:"path,omitempty"`
