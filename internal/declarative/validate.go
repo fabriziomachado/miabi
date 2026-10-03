@@ -212,14 +212,14 @@ var validHTTPMethod = map[string]bool{
 // declarative package keeps its one dependency; a test asserts the two lists agree.
 var validStrategy = map[string]bool{"recreate": true, "rolling": true, "canary": true}
 
-var validHealthcheckType = map[string]bool{"none": true, "http": true, "command": true}
+var validHealthcheckType = map[string]bool{"image": true, "none": true, "http": true, "command": true}
 
 func validateHealthcheck(hc *HealthcheckSpec) error {
 	if hc == nil {
 		return nil
 	}
 	if !validHealthcheckType[hc.Type] {
-		return fmt.Errorf("healthcheck.type %q must be http, command or none", hc.Type)
+		return fmt.Errorf("healthcheck.type %q must be http, command, image or none", hc.Type)
 	}
 	if hc.Type == "command" && strings.TrimSpace(hc.Command) == "" {
 		return fmt.Errorf("healthcheck.command is required when healthcheck.type is command")

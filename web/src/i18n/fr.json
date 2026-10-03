@@ -413,7 +413,8 @@
     "hc": {
       "command": "Commande",
       "http": "HTTP",
-      "none": "Aucune"
+      "none": "Aucune",
+      "image": "Celui de l’image"
     },
     "health": "Santé",
     "healthcheck": "Vérification de santé",
@@ -597,7 +598,7 @@
       "gpuFilterHint": "Restreindre à un fabricant/modèle (par ex. {vendor}). Vide = n’importe quel GPU activé sur le nœud.",
       "gpuHint": "Périphériques GPU entiers à attacher. 0 = aucun. Décompté du quota de GPU du plan pendant l’exécution.",
       "hostMountsHint": "Montez des chemins hôte autorisés dans cette application. Ils accordent un accès au niveau de l’hôte — n’attachez que ce dont l’application a vraiment besoin.",
-      "httpProbeHint": "Utilise {curl} (ou {wget}) à l’intérieur du conteneur — l’image doit en inclure un.",
+      "httpProbeHint": "Miabi copie une petite sonde dans le conteneur : l’image n’a besoin ni de curl ni de wget. Un service répliqué utilise plutôt le curl, wget ou bash de l’image.",
       "needsDeveloper": "Vous devez avoir un accès développeur pour modifier les paramètres.",
       "noNewPrivilegesHint": "Empêche les processus d’acquérir des privilèges via des binaires setuid, comme {flag}.",
       "noRepoPipelineHint": "Cette application se construit directement. Si vous avez ajouté un {file} au dépôt, resynchronisez pour l’adopter.",
@@ -629,7 +630,9 @@
       "switchToImageBody": "Le dépôt, la branche et les paramètres de build seront effacés, et l’application aura besoin d’un redéploiement pour s’exécuter depuis la nouvelle source.",
       "switchToImageTitle": "Passage à une image Docker.",
       "templateImageWarning": "Changer l’image ici signifie qu’elle ne correspond plus au modèle, et une future mise à niveau du modèle pourrait l’écraser.",
-      "waitHealthyHint": "Les déploiements attendent que le conteneur se déclare sain avant la mise en service."
+      "waitHealthyHint": "Les déploiements attendent que le conteneur se déclare sain avant la mise en service.",
+      "imageProbeHint": "Utilise le HEALTHCHECK de l’image, s’il en déclare un. Les déploiements ne l’attendent pas.",
+      "noneProbeHint": "Aucune vérification : le HEALTHCHECK de l’image est aussi désactivé. À utiliser pour les workers et planificateurs qui ne servent pas de HTTP."
     },
     "shell": "Shell",
     "source": {

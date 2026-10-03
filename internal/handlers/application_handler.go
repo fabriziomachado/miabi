@@ -198,7 +198,7 @@ type UpdateAppBody struct {
 	CanaryInitialWeight           int                      `json:"canary_initial_weight"`
 	CanaryStepWeight              int                      `json:"canary_step_weight"`
 	CanaryStepIntervalSeconds     int                      `json:"canary_step_interval_seconds"`
-	HealthcheckType               string                   `json:"healthcheck_type" enum:"none,http,command"`
+	HealthcheckType               string                   `json:"healthcheck_type" enum:"image,none,http,command"`
 	HealthcheckHTTPPath           string                   `json:"healthcheck_http_path"`
 	HealthcheckPort               int                      `json:"healthcheck_port"`
 	HealthcheckCommand            string                   `json:"healthcheck_command"`

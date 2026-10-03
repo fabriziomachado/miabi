@@ -46,8 +46,8 @@ func TestHealthcheckParses(t *testing.T) {
 
 func TestHealthcheckValidation(t *testing.T) {
 	cases := map[string]string{
-		"    type: tcp\n":                     "must be http, command or none",
-		"    path: /healthz\n":                "must be http, command or none",
+		"    type: tcp\n":                     "must be http, command, image or none",
+		"    path: /healthz\n":                "must be http, command, image or none",
 		"    type: command\n":                 "healthcheck.command is required",
 		"    type: http\n    path: healthz\n": "must start with /",
 		"    type: http\n    port: 70000\n":   "between 1 and 65535",
@@ -62,7 +62,7 @@ func TestHealthcheckValidation(t *testing.T) {
 
 // The declarative package keeps its own list of types; this stops it drifting from the model's.
 func TestManifestHealthcheckTypesMatchTheModel(t *testing.T) {
-	for _, typ := range []models.HealthcheckType{models.HealthcheckNone, models.HealthcheckHTTP, models.HealthcheckCommand} {
+	for _, typ := range []models.HealthcheckType{models.HealthcheckImage, models.HealthcheckNone, models.HealthcheckHTTP, models.HealthcheckCommand} {
 		body := "    type: " + string(typ) + "\n"
 		if typ == models.HealthcheckCommand {
 			body += "    command: pg_isready\n"

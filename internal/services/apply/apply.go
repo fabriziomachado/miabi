@@ -1411,7 +1411,7 @@ func trimDefaults(a *declarative.ApplicationSpec, defaultLocation string) {
 		}
 	}
 	if hc := a.Healthcheck; hc != nil {
-		if hc.Type == string(models.HealthcheckNone) {
+		if hc.Type == string(models.HealthcheckImage) {
 			a.Healthcheck = nil
 		} else {
 			hc.IntervalSeconds = trimDefault(hc.IntervalSeconds, 30)
@@ -3030,7 +3030,7 @@ func securitySpecOf(app *models.Application) *declarative.SecuritySpec {
 func healthcheckSpecOf(app *models.Application) *declarative.HealthcheckSpec {
 	t := app.HealthcheckType
 	if t == "" {
-		t = models.HealthcheckNone
+		t = models.HealthcheckImage
 	}
 	return &declarative.HealthcheckSpec{
 		Type: string(t), Path: app.HealthcheckHTTPPath, Port: app.HealthcheckPort, Command: app.HealthcheckCommand,

@@ -37,8 +37,8 @@ func TestApplyHealthcheckKeepsUnstatedFields(t *testing.T) {
 }
 
 func TestHealthcheckSpecOfStatesType(t *testing.T) {
-	if hc := healthcheckSpecOf(&models.Application{}); hc.Type != "none" {
-		t.Errorf("an app without a check reads as type %q, want none", hc.Type)
+	if hc := healthcheckSpecOf(&models.Application{}); hc.Type != "image" {
+		t.Errorf("an app without a check reads as type %q, want image", hc.Type)
 	}
 	hc := healthcheckSpecOf(consoleApp())
 	if hc.Type != "http" || hc.Path != "/healthz" || hc.Port != 8080 || hc.IntervalSeconds != 10 {
@@ -54,10 +54,17 @@ func TestExportTrimsHealthcheckDefaults(t *testing.T) {
 		t.Errorf("exported healthcheck = %+v, want %+v", a.Healthcheck, want)
 	}
 
-	none := &d.ApplicationSpec{Healthcheck: healthcheckSpecOf(&models.Application{})}
+	image := &d.ApplicationSpec{Healthcheck: healthcheckSpecOf(&models.Application{})}
+	trimDefaults(image, "")
+	if image.Healthcheck != nil {
+		t.Error("an app on the image's own check should export without a healthcheck block")
+	}
+
+	// none is a decision, not the default, so an export keeps it.
+	none := &d.ApplicationSpec{Healthcheck: healthcheckSpecOf(&models.Application{HealthcheckType: models.HealthcheckNone})}
 	trimDefaults(none, "")
-	if none.Healthcheck != nil {
-		t.Error("an app without a check should export without a healthcheck block")
+	if none.Healthcheck == nil || none.Healthcheck.Type != "none" {
+		t.Errorf("an explicit none must survive export, got %+v", none.Healthcheck)
 	}
 }
 

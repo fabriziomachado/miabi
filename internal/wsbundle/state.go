@@ -15,7 +15,11 @@ import (
 //
 //	1  the original document
 //	2  adds configs, and config mounts on an application
-const StateSchema = 2
+//	3  healthcheck_type "none" disables the image's own HEALTHCHECK; before, it kept it ("image")
+const StateSchema = 3
+
+// HealthcheckNoneDisables is the first schema whose "none" healthcheck disables the image's own check.
+const HealthcheckNoneDisables = 3
 
 // MinStateSchema is the oldest document this build can read. Every version in
 // [MinStateSchema, StateSchema] differs only by fields that are absent in the

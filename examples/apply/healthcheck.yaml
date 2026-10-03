@@ -9,7 +9,10 @@
 #            Works in any image, including distroless and scratch ones without a shell.
 #   command  Run `command` in the container. Healthy on exit code 0. Needs a shell in
 #            the image.
-#   none     No check: the deploy goes live as soon as the container is running.
+#   image    The image's own HEALTHCHECK, if it declares one. The default. Deploys
+#            don't wait for it.
+#   none     No check at all, not even the image's own. For workers and schedulers
+#            built from a web image, whose baked-in HTTP check would fail.
 #
 # Timing, with the defaults a new app gets:
 #
@@ -20,7 +23,7 @@
 #
 # Only the fields a manifest states are applied. Leave the block out and the app keeps
 # whatever check it has (set in the console, say); state just `type` and `path` and the
-# timing stays as it is. `type: none` turns a check off.
+# timing stays as it is. `type: none` turns every check off, the image's included.
 #
 #   miabi apply -f healthcheck.yaml
 ---
@@ -76,3 +79,20 @@ spec:
     command: test -f /tmp/worker.alive
     intervalSeconds: 15
     retries: 2
+---
+# A queue worker built from a web image (serversideup/php ships an HTTP HEALTHCHECK).
+# The worker serves no HTTP, so that check would fail and, as a service, get its
+# task replaced in a loop. none switches it off.
+apiVersion: miabi.io/v1
+kind: Application
+metadata:
+  name: queue
+spec:
+  image: serversideup/php
+  tag: "8.4-fpm-nginx"
+  command: ["php", "artisan", "queue:work"]
+  deployment:
+    runtime: service
+    replicas: 2
+  healthcheck:
+    type: none

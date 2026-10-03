@@ -26,8 +26,15 @@ func TestNextCanaryWeight(t *testing.T) {
 }
 
 func TestBuildHealthcheck(t *testing.T) {
-	if buildHealthcheck(&models.Application{HealthcheckType: models.HealthcheckNone}) != nil {
-		t.Errorf("none should produce no healthcheck")
+	// nil leaves Docker to the image's own HEALTHCHECK; none has to switch that off too, or a web check
+	// baked into the image kills a worker that serves no HTTP (#451).
+	for _, typ := range []models.HealthcheckType{models.HealthcheckImage, ""} {
+		if buildHealthcheck(&models.Application{HealthcheckType: typ}) != nil {
+			t.Errorf("%q should leave the image's own healthcheck in place", typ)
+		}
+	}
+	if none := buildHealthcheck(&models.Application{HealthcheckType: models.HealthcheckNone}); none == nil || len(none.Test) != 1 || none.Test[0] != "NONE" {
+		t.Errorf("none should disable every healthcheck, got %+v", none)
 	}
 	if buildHealthcheck(&models.Application{HealthcheckType: models.HealthcheckCommand, HealthcheckCommand: "  "}) != nil {
 		t.Errorf("blank command should produce no healthcheck")

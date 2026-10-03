@@ -700,7 +700,7 @@ func (h *DeployHandler) run(ctx context.Context, app *models.Application, dep *m
 	_ = h.deployments.Update(dep)
 	h.log(dep, "container created "+shortID(containerID))
 
-	if app.HealthcheckType != models.HealthcheckNone {
+	if app.HealthcheckType.GatesDeploy() {
 		h.log(dep, "waiting for container to become healthy")
 	}
 	if err := h.healthGate(ctx, app, containerID); err != nil {
@@ -708,7 +708,7 @@ func (h *DeployHandler) run(ctx context.Context, app *models.Application, dep *m
 		_ = h.fail(dep, err)
 		return
 	}
-	if app.HealthcheckType != models.HealthcheckNone {
+	if app.HealthcheckType.GatesDeploy() {
 		h.log(dep, "container is healthy")
 	}
 
@@ -1635,7 +1635,7 @@ func (h *DeployHandler) resolveRegistryAuth(app *models.Application, dep *models
 // with one configured it additionally waits for Docker to report "healthy", failing fast on an
 // unhealthy verdict or an early exit.
 func (h *DeployHandler) healthGate(ctx context.Context, app *models.Application, containerID string) error {
-	requireHealthy := app.HealthcheckType == models.HealthcheckHTTP || app.HealthcheckType == models.HealthcheckCommand
+	requireHealthy := app.HealthcheckType.GatesDeploy()
 	deadline := time.Now().Add(healthGateTimeout(app, requireHealthy))
 	for time.Now().Before(deadline) {
 		c, err := h.eng(app).InspectContainer(ctx, containerID)
@@ -1680,7 +1680,8 @@ func healthGateTimeout(app *models.Application, requireHealthy bool) time.Durati
 	return d
 }
 
-// buildHealthcheck turns an app's healthcheck config into a docker spec, or nil when disabled.
+// buildHealthcheck turns an app's healthcheck config into a docker spec. nil keeps the image's own
+// HEALTHCHECK; none sends Docker's NONE so a web check baked into the image cannot kill a worker.
 func buildHealthcheck(app *models.Application) *docker.HealthcheckSpec {
 	var test []string
 	switch app.HealthcheckType {
@@ -1693,6 +1694,8 @@ func buildHealthcheck(app *models.Application) *docker.HealthcheckSpec {
 			return nil
 		}
 		test = []string{"CMD-SHELL", cmd}
+	case models.HealthcheckNone:
+		return &docker.HealthcheckSpec{Test: []string{"NONE"}}
 	default:
 		return nil
 	}

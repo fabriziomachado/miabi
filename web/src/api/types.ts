@@ -1506,7 +1506,7 @@ export type ImagePullPolicy = 'always' | 'if-not-present' | 'never'
 // BuildMethod selects how a git app's image is built: auto (Dockerfile if
 // present, else Cloud Native Buildpacks), or a forced dockerfile/buildpack.
 export type BuildMethod = 'auto' | 'dockerfile' | 'buildpack'
-export type HealthcheckType = 'none' | 'http' | 'command'
+export type HealthcheckType = 'image' | 'none' | 'http' | 'command'
 
 export interface ResourceLimits {
   max_cpu_cores: number
