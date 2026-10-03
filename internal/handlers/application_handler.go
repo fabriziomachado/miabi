@@ -4,6 +4,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -154,77 +155,235 @@ func (b *ServiceUpdateConfigBody) toModel() *models.ServiceUpdateConfig {
 }
 
 type UpdateAppRequest struct {
-	Body struct {
-		// Name (optional) renames the unique slug handle; DisplayName edits the label.
-		Name        string `json:"name"`
-		DisplayName string `json:"display_name"`
-		Image       string `json:"image"`
-		Tag         string `json:"tag"`
-		// Git source (git apps). GitRepo is the clone URL — leave empty to use the
-		// attached repository's URL; GitRef is the branch/ref.
-		GitRepo         string         `json:"git_repo"`
-		GitRef          string         `json:"git_ref"`
-		RegistryID      *uint          `json:"registry_id"`
-		GitRepositoryID *uint          `json:"git_repository_id"`
-		StackID         *uint          `json:"stack_id"`
-		NetworkIDs      []uint         `json:"network_ids"`
-		Ports           []PortSpecBody `json:"ports"`
-		Command         []string       `json:"command"`
-		Port            int            `json:"port"`
-		MemoryBytes     int64          `json:"memory_bytes" min:"0"`
-		NanoCPUs        int64          `json:"nano_cpus" min:"0"`
-		// GPUCount requests whole GPU devices (0 = none); GPUKind narrows to a
-		// vendor/model. Gated by the AllowGPU plan capability.
-		GPUCount int    `json:"gpu_count" min:"0"`
-		GPUKind  string `json:"gpu_kind"`
-		// RunAsUser pins the container to an account ("1000", "1000:1000", "node").
-		// Empty clears it back to the image's own user; a workspace under the
-		// restricted security profile must give a non-root numeric uid. Needs a redeploy.
-		RunAsUser string `json:"run_as_user"`
-		// Replace the stored sets; an empty array revokes. Need a redeploy.
-		AddCapabilities []string `json:"add_capabilities"`
-		Devices         []string `json:"devices"`
-		// Hardening; omitted leaves it unchanged, so a partial update never loosens a container.
-		ReadOnlyRootFilesystem *bool    `json:"read_only_root_filesystem"`
-		NoNewPrivileges        *bool    `json:"no_new_privileges"`
-		DropCapabilities       []string `json:"drop_capabilities"`
-		RestartPolicy          string   `json:"restart_policy" enum:"no,always,unless-stopped,on-failure"`
-		ImagePullPolicy        string   `json:"image_pull_policy" enum:"always,if-not-present,never"`
-		// Empty runtime_kind leaves the stored kind. Deliberately not defaulted like
-		// the create field: that would demote a live service on any settings save.
-		RuntimeKind          string                   `json:"runtime_kind" enum:"container,service"`
-		Replicas             int                      `json:"replicas" min:"0" max:"100"`
-		PlacementConstraints []string                 `json:"placement_constraints"`
-		UpdateConfig         *ServiceUpdateConfigBody `json:"update_config"`
-		// Build config (git source). See CreateAppRequest. Empty build_method
-		// leaves the stored method unchanged.
-		BuildMethod string            `json:"build_method" enum:"auto,dockerfile,buildpack"`
-		Builder     string            `json:"builder"`
-		Buildpacks  []string          `json:"buildpacks"`
-		BuildEnv    map[string]string `json:"build_env"`
-		// Metadata: user labels merged over the app's current metadata; reserved
-		// "miabi.io/" (built-in) keys are protected and cannot be changed here.
-		Metadata map[string]string `json:"metadata"`
-		// ContainerLabels are user-defined Docker labels stamped on the app's container(s). Gated by the
-		// AllowCustomLabels plan capability plus a global kill-switch; reserved keys (io.miabi.*,
-		// com.docker.*) are rejected. nil leaves them unchanged; a redeploy applies changes.
-		ContainerLabels map[string]string `json:"container_labels"`
-		DeployStrategy  string            `json:"deploy_strategy" enum:"recreate,rolling,canary"`
-		// Empty leaves the stored policy, so a partial update never re-arms reconciliation for an app an
-		// operator deliberately exempted.
-		ReconcilePolicy               string `json:"reconcile_policy" enum:"inherit,off,observe,enforce"`
-		CanaryInitialWeight           int    `json:"canary_initial_weight"`
-		CanaryStepWeight              int    `json:"canary_step_weight"`
-		CanaryStepIntervalSeconds     int    `json:"canary_step_interval_seconds"`
-		HealthcheckType               string `json:"healthcheck_type" enum:"none,http,command"`
-		HealthcheckHTTPPath           string `json:"healthcheck_http_path"`
-		HealthcheckPort               int    `json:"healthcheck_port"`
-		HealthcheckCommand            string `json:"healthcheck_command"`
-		HealthcheckIntervalSeconds    int    `json:"healthcheck_interval_seconds"`
-		HealthcheckTimeoutSeconds     int    `json:"healthcheck_timeout_seconds"`
-		HealthcheckRetries            int    `json:"healthcheck_retries"`
-		HealthcheckStartPeriodSeconds int    `json:"healthcheck_start_period_seconds"`
-	} `json:"body"`
+	Body UpdateAppBody `json:"body"`
+}
+
+type UpdateAppBody struct {
+	DisplayName                   string                   `json:"display_name"`
+	Image                         string                   `json:"image"`
+	Tag                           string                   `json:"tag"`
+	GitRepo                       string                   `json:"git_repo"`
+	GitRef                        string                   `json:"git_ref"`
+	RegistryID                    *uint                    `json:"registry_id"`
+	GitRepositoryID               *uint                    `json:"git_repository_id"`
+	StackID                       *uint                    `json:"stack_id"`
+	NetworkIDs                    []uint                   `json:"network_ids"`
+	Ports                         []PortSpecBody           `json:"ports"`
+	Command                       []string                 `json:"command"`
+	Port                          int                      `json:"port"`
+	MemoryBytes                   int64                    `json:"memory_bytes" min:"0"`
+	NanoCPUs                      int64                    `json:"nano_cpus" min:"0"`
+	GPUCount                      int                      `json:"gpu_count" min:"0"`
+	GPUKind                       string                   `json:"gpu_kind"`
+	RunAsUser                     string                   `json:"run_as_user"`
+	AddCapabilities               []string                 `json:"add_capabilities"`
+	Devices                       []string                 `json:"devices"`
+	ReadOnlyRootFilesystem        *bool                    `json:"read_only_root_filesystem"`
+	NoNewPrivileges               *bool                    `json:"no_new_privileges"`
+	DropCapabilities              []string                 `json:"drop_capabilities"`
+	RestartPolicy                 string                   `json:"restart_policy" enum:"no,always,unless-stopped,on-failure"`
+	ImagePullPolicy               string                   `json:"image_pull_policy" enum:"always,if-not-present,never"`
+	RuntimeKind                   string                   `json:"runtime_kind" enum:"container,service"`
+	Replicas                      int                      `json:"replicas" min:"0" max:"100"`
+	PlacementConstraints          []string                 `json:"placement_constraints"`
+	UpdateConfig                  *ServiceUpdateConfigBody `json:"update_config"`
+	BuildMethod                   string                   `json:"build_method" enum:"auto,dockerfile,buildpack"`
+	Builder                       string                   `json:"builder"`
+	Buildpacks                    []string                 `json:"buildpacks"`
+	BuildEnv                      map[string]string        `json:"build_env"`
+	Metadata                      map[string]string        `json:"metadata"`
+	ContainerLabels               map[string]string        `json:"container_labels"`
+	DeployStrategy                string                   `json:"deploy_strategy" enum:"recreate,rolling,canary"`
+	ReconcilePolicy               string                   `json:"reconcile_policy" enum:"inherit,off,observe,enforce"`
+	CanaryInitialWeight           int                      `json:"canary_initial_weight"`
+	CanaryStepWeight              int                      `json:"canary_step_weight"`
+	CanaryStepIntervalSeconds     int                      `json:"canary_step_interval_seconds"`
+	HealthcheckType               string                   `json:"healthcheck_type" enum:"none,http,command"`
+	HealthcheckHTTPPath           string                   `json:"healthcheck_http_path"`
+	HealthcheckPort               int                      `json:"healthcheck_port"`
+	HealthcheckCommand            string                   `json:"healthcheck_command"`
+	HealthcheckIntervalSeconds    int                      `json:"healthcheck_interval_seconds"`
+	HealthcheckTimeoutSeconds     int                      `json:"healthcheck_timeout_seconds"`
+	HealthcheckRetries            int                      `json:"healthcheck_retries"`
+	HealthcheckStartPeriodSeconds int                      `json:"healthcheck_start_period_seconds"`
+
+	present map[string]bool
+}
+
+// UnmarshalJSON records which keys the client sent, so an omitted field is left alone.
+func (b *UpdateAppBody) UnmarshalJSON(data []byte) error {
+	type plain UpdateAppBody
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return err
+	}
+	*b = UpdateAppBody(p)
+	b.present = make(map[string]bool, len(keys))
+	for k := range keys {
+		b.present[k] = true
+	}
+	return nil
+}
+
+// sent reports whether the client included key. A body not decoded from JSON counts every key as sent.
+func (b *UpdateAppBody) sent(key string) bool {
+	return b.present == nil || b.present[key]
+}
+
+// changesSource reports whether applying the update would change app's image source. It compares what
+// would be written, so a sent empty tag, which clears the tag, is a change too.
+func (b *UpdateAppBody) changesSource(app *models.Application) bool {
+	changed := (b.Image != "" && b.Image != app.Image) || (b.sent("tag") && b.Tag != app.Tag)
+	if app.SourceType == models.AppSourceGit {
+		changed = changed ||
+			(b.sent("git_repo") && strings.TrimSpace(b.GitRepo) != app.GitRepo) ||
+			(b.sent("git_ref") && strings.TrimSpace(b.GitRef) != app.GitRef)
+	}
+	return changed
+}
+
+// applyTo writes the update's fields onto app. Fields the client left out keep their stored value.
+func (b *UpdateAppBody) applyTo(app *models.Application) {
+	if b.Image != "" {
+		app.Image = b.Image
+	}
+	if b.sent("tag") {
+		app.Tag = b.Tag
+	}
+	if b.Command != nil {
+		app.Command = b.Command
+	}
+	if b.Metadata != nil {
+		// Merge user labels, protecting built-in "miabi.io/" keys.
+		app.Metadata = models.MergeUserMetadata(app.Metadata, b.Metadata)
+	}
+	if b.sent("port") {
+		app.Port = b.Port
+	}
+	if b.sent("memory_bytes") {
+		app.MemoryBytes = b.MemoryBytes
+	}
+	if b.sent("nano_cpus") {
+		app.NanoCPUs = b.NanoCPUs
+	}
+	if b.sent("gpu_count") {
+		app.GPUCount = b.GPUCount
+	}
+	if b.sent("gpu_kind") {
+		app.GPUKind = b.GPUKind
+	}
+	if b.sent("run_as_user") {
+		app.RunAsUser = b.RunAsUser // validated against the security profile in the service
+	}
+	if b.sent("add_capabilities") {
+		app.AddCapabilities = b.AddCapabilities // allow-listed + gated in the service
+	}
+	if b.sent("devices") {
+		app.Devices = b.Devices
+	}
+	if b.ReadOnlyRootFilesystem != nil {
+		app.ReadOnlyRootFilesystem = *b.ReadOnlyRootFilesystem
+	}
+	if b.NoNewPrivileges != nil {
+		app.NoNewPrivileges = *b.NoNewPrivileges
+	}
+	if b.DropCapabilities != nil {
+		app.DropCapabilities = b.DropCapabilities
+	}
+	if b.RestartPolicy != "" {
+		app.RestartPolicy = models.RestartPolicy(b.RestartPolicy)
+	}
+	if b.ImagePullPolicy != "" {
+		app.ImagePullPolicy = models.ImagePullPolicy(b.ImagePullPolicy)
+	}
+	// Cluster runtime: empty kind / non-positive replicas leave the stored value.
+	if b.RuntimeKind != "" {
+		app.RuntimeKind = models.RuntimeKind(b.RuntimeKind)
+	}
+	if b.Replicas > 0 {
+		app.Replicas = b.Replicas
+	}
+	if b.PlacementConstraints != nil {
+		app.PlacementConstraints = b.PlacementConstraints
+	}
+	if b.UpdateConfig != nil {
+		app.UpdateConfig = b.UpdateConfig.toModel()
+	}
+	if b.sent("registry_id") {
+		app.RegistryID = b.RegistryID
+	}
+	if b.sent("git_repository_id") {
+		app.GitRepositoryID = b.GitRepositoryID
+	}
+	if b.sent("stack_id") {
+		app.StackID = b.StackID
+	}
+	// Git source + build config apply only to git apps; an empty build_method
+	// leaves the stored method unchanged. The service validates/normalizes on
+	// Update (an empty git_repo is valid when a repository is attached).
+	if app.SourceType == models.AppSourceGit {
+		if b.sent("git_repo") {
+			app.GitRepo = strings.TrimSpace(b.GitRepo)
+		}
+		if b.sent("git_ref") {
+			app.GitRef = strings.TrimSpace(b.GitRef)
+		}
+		if b.BuildMethod != "" {
+			app.BuildMethod = models.AppBuildMethod(b.BuildMethod)
+		}
+		if b.sent("builder") {
+			app.Builder = b.Builder
+		}
+		if b.sent("buildpacks") {
+			app.Buildpacks = b.Buildpacks
+		}
+		if b.sent("build_env") {
+			app.BuildEnv = b.BuildEnv
+		}
+	}
+	if p := models.ReconcilePolicy(b.ReconcilePolicy); p != "" && models.ValidReconcilePolicy(p) {
+		app.ReconcilePolicy = p
+	}
+	if b.DeployStrategy != "" {
+		app.DeployStrategy = models.DeployStrategy(b.DeployStrategy)
+	}
+	if b.CanaryInitialWeight > 0 {
+		app.CanaryInitialWeight = b.CanaryInitialWeight
+	}
+	if b.CanaryStepWeight > 0 {
+		app.CanaryStepWeight = b.CanaryStepWeight
+	}
+	if b.CanaryStepIntervalSeconds > 0 {
+		app.CanaryStepIntervalSeconds = b.CanaryStepIntervalSeconds
+	}
+	if b.HealthcheckType != "" {
+		app.HealthcheckType = models.HealthcheckType(b.HealthcheckType)
+	}
+	if b.sent("healthcheck_http_path") {
+		app.HealthcheckHTTPPath = b.HealthcheckHTTPPath
+	}
+	if b.sent("healthcheck_port") {
+		app.HealthcheckPort = b.HealthcheckPort
+	}
+	if b.sent("healthcheck_command") {
+		app.HealthcheckCommand = b.HealthcheckCommand
+	}
+	if b.HealthcheckIntervalSeconds > 0 {
+		app.HealthcheckIntervalSeconds = b.HealthcheckIntervalSeconds
+	}
+	if b.HealthcheckTimeoutSeconds > 0 {
+		app.HealthcheckTimeoutSeconds = b.HealthcheckTimeoutSeconds
+	}
+	if b.HealthcheckRetries > 0 {
+		app.HealthcheckRetries = b.HealthcheckRetries
+	}
+	if b.sent("healthcheck_start_period_seconds") && b.HealthcheckStartPeriodSeconds >= 0 {
+		app.HealthcheckStartPeriodSeconds = b.HealthcheckStartPeriodSeconds
+	}
 }
 
 func toPortSpecs(in []PortSpecBody) []application.PortSpec {
@@ -392,11 +551,6 @@ func (h *ApplicationHandler) Update(c *okapi.Context, req *UpdateAppRequest) err
 	if err != nil {
 		return c.AbortNotFound("application not found")
 	}
-	if req.Body.Name != "" {
-		if err := h.svc.SetName(app, req.Body.Name); err != nil {
-			return h.mapErr(c, err)
-		}
-	}
 	if req.Body.DisplayName != "" {
 		app.DisplayName = req.Body.DisplayName
 	}
@@ -406,17 +560,6 @@ func (h *ApplicationHandler) Update(c *okapi.Context, req *UpdateAppRequest) err
 	if err := h.requireSourceUnchanged(c, app, req); err != nil {
 		return err
 	}
-	if req.Body.Image != "" {
-		app.Image = req.Body.Image
-	}
-	app.Tag = req.Body.Tag
-	if req.Body.Command != nil {
-		app.Command = req.Body.Command
-	}
-	if req.Body.Metadata != nil {
-		// Merge user labels, protecting built-in "miabi.io/" keys.
-		app.Metadata = models.MergeUserMetadata(app.Metadata, req.Body.Metadata)
-	}
 	if req.Body.ContainerLabels != nil {
 		// Gated + validated + persisted here (reserved keys rejected). Sets
 		// app.ContainerLabels so the later Update save stays consistent.
@@ -424,102 +567,23 @@ func (h *ApplicationHandler) Update(c *okapi.Context, req *UpdateAppRequest) err
 			return h.mapLabelErr(c, err)
 		}
 	}
-	app.Port = req.Body.Port
-	app.MemoryBytes = req.Body.MemoryBytes
-	app.NanoCPUs = req.Body.NanoCPUs
-	app.GPUCount = req.Body.GPUCount
-	app.GPUKind = req.Body.GPUKind
-	app.RunAsUser = req.Body.RunAsUser             // validated against the security profile in the service
-	app.AddCapabilities = req.Body.AddCapabilities // allow-listed + gated in the service
-	app.Devices = req.Body.Devices
-	if req.Body.ReadOnlyRootFilesystem != nil {
-		app.ReadOnlyRootFilesystem = *req.Body.ReadOnlyRootFilesystem
-	}
-	if req.Body.NoNewPrivileges != nil {
-		app.NoNewPrivileges = *req.Body.NoNewPrivileges
-	}
-	if req.Body.DropCapabilities != nil {
-		app.DropCapabilities = req.Body.DropCapabilities
-	}
-	if req.Body.RestartPolicy != "" {
-		app.RestartPolicy = models.RestartPolicy(req.Body.RestartPolicy)
-	}
-	if req.Body.ImagePullPolicy != "" {
-		app.ImagePullPolicy = models.ImagePullPolicy(req.Body.ImagePullPolicy)
-	}
-	// Cluster runtime: empty kind / non-positive replicas leave the stored value.
-	if req.Body.RuntimeKind != "" {
-		app.RuntimeKind = models.RuntimeKind(req.Body.RuntimeKind)
-	}
-	if req.Body.Replicas > 0 {
-		app.Replicas = req.Body.Replicas
-	}
-	if req.Body.PlacementConstraints != nil {
-		app.PlacementConstraints = req.Body.PlacementConstraints
-	}
-	if req.Body.UpdateConfig != nil {
-		app.UpdateConfig = req.Body.UpdateConfig.toModel()
-	}
-	app.RegistryID = req.Body.RegistryID
-	app.GitRepositoryID = req.Body.GitRepositoryID
-	app.StackID = req.Body.StackID
-	// Git source + build config apply only to git apps; an empty build_method
-	// leaves the stored method unchanged. The service validates/normalizes on
-	// Update (an empty git_repo is valid when a repository is attached).
-	if app.SourceType == models.AppSourceGit {
-		app.GitRepo = strings.TrimSpace(req.Body.GitRepo)
-		app.GitRef = strings.TrimSpace(req.Body.GitRef)
-		if req.Body.BuildMethod != "" {
-			app.BuildMethod = models.AppBuildMethod(req.Body.BuildMethod)
-		}
-		app.Builder = req.Body.Builder
-		app.Buildpacks = req.Body.Buildpacks
-		app.BuildEnv = req.Body.BuildEnv
-	}
-	if p := models.ReconcilePolicy(req.Body.ReconcilePolicy); p != "" && models.ValidReconcilePolicy(p) {
-		app.ReconcilePolicy = p
-	}
-	if req.Body.DeployStrategy != "" {
-		app.DeployStrategy = models.DeployStrategy(req.Body.DeployStrategy)
-	}
-	if req.Body.CanaryInitialWeight > 0 {
-		app.CanaryInitialWeight = req.Body.CanaryInitialWeight
-	}
-	if req.Body.CanaryStepWeight > 0 {
-		app.CanaryStepWeight = req.Body.CanaryStepWeight
-	}
-	if req.Body.CanaryStepIntervalSeconds > 0 {
-		app.CanaryStepIntervalSeconds = req.Body.CanaryStepIntervalSeconds
-	}
-	if req.Body.HealthcheckType != "" {
-		app.HealthcheckType = models.HealthcheckType(req.Body.HealthcheckType)
-	}
-	app.HealthcheckHTTPPath = req.Body.HealthcheckHTTPPath
-	app.HealthcheckPort = req.Body.HealthcheckPort
-	app.HealthcheckCommand = req.Body.HealthcheckCommand
-	if req.Body.HealthcheckIntervalSeconds > 0 {
-		app.HealthcheckIntervalSeconds = req.Body.HealthcheckIntervalSeconds
-	}
-	if req.Body.HealthcheckTimeoutSeconds > 0 {
-		app.HealthcheckTimeoutSeconds = req.Body.HealthcheckTimeoutSeconds
-	}
-	if req.Body.HealthcheckRetries > 0 {
-		app.HealthcheckRetries = req.Body.HealthcheckRetries
-	}
-	if req.Body.HealthcheckStartPeriodSeconds >= 0 && req.Body.HealthcheckType != "" {
-		app.HealthcheckStartPeriodSeconds = req.Body.HealthcheckStartPeriodSeconds
-	}
+	b := &req.Body
+	b.applyTo(app)
 	app.Stack = nil    // cleared so the association isn't re-saved; StackID drives it
 	app.Networks = nil // managed separately via SetNetworks (avoid association save)
 	app.Ports = nil    // managed separately via SetPorts
 	if err := h.svc.Update(app); err != nil {
 		return h.mapErr(c, err)
 	}
-	if err := h.svc.SetNetworks(app, req.Body.NetworkIDs); err != nil {
-		return c.AbortInternalServerError("failed to update networks", err)
+	if b.sent("network_ids") {
+		if err := h.svc.SetNetworks(app, b.NetworkIDs); err != nil {
+			return c.AbortInternalServerError("failed to update networks", err)
+		}
 	}
-	if err := h.svc.SetPorts(app, toPortSpecs(req.Body.Ports)); err != nil {
-		return c.AbortInternalServerError("failed to update ports", err)
+	if b.sent("ports") {
+		if err := h.svc.SetPorts(app, toPortSpecs(b.Ports)); err != nil {
+			return c.AbortInternalServerError("failed to update ports", err)
+		}
 	}
 	h.record(c, app.WorkspaceID, "app.update", app.ID)
 	h.markRedeploy(c, app)
@@ -1386,14 +1450,7 @@ func (h *ApplicationHandler) requireSourceUnchanged(c *okapi.Context, app *model
 	if _, owned := models.SourceOwnedElsewhere(app.Metadata); !owned {
 		return nil
 	}
-	changed := (req.Body.Image != "" && req.Body.Image != app.Image) ||
-		(req.Body.Tag != "" && req.Body.Tag != app.Tag)
-	if app.SourceType == models.AppSourceGit {
-		changed = changed ||
-			(req.Body.GitRepo != "" && strings.TrimSpace(req.Body.GitRepo) != app.GitRepo) ||
-			(req.Body.GitRef != "" && strings.TrimSpace(req.Body.GitRef) != app.GitRef)
-	}
-	if !changed {
+	if !req.Body.changesSource(app) {
 		return nil
 	}
 	return h.requireSourceEditable(c, app)
@@ -1404,10 +1461,6 @@ func (h *ApplicationHandler) mapErr(c *okapi.Context, err error) error {
 		return a
 	}
 	switch {
-	case errors.Is(err, application.ErrSlugTaken):
-		return c.AbortWithError(409, err)
-	case errors.Is(err, application.ErrNameInvalid):
-		return c.AbortBadRequest(err.Error())
 	case errors.Is(err, application.ErrImageNotPermitted):
 		return c.AbortForbidden(err.Error())
 	case errors.Is(err, application.ErrImageRequired), errors.Is(err, application.ErrGitRepoRequired),

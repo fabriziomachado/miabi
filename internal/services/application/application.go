@@ -33,8 +33,6 @@ import (
 )
 
 var (
-	ErrSlugTaken     = errors.New("application name already taken")
-	ErrNameInvalid   = errors.New("name must contain only lowercase letters, digits and hyphens")
 	ErrImageRequired = errors.New("image is required for image-source applications")
 	// ErrImageNotPermitted rejects an image that lives in the built-in registry
 	// under a namespace this workspace does not own. Pulling it would use the
@@ -2700,28 +2698,6 @@ func (s *Service) uniqueName(workspaceID uint, base string) (string, error) {
 	return slug.Unique(base, "app", func(candidate string) (bool, error) {
 		return s.apps.ExistsByName(workspaceID, candidate)
 	})
-}
-
-// SetName validates and applies a new handle to app in memory; the caller persists via Update. The
-// value is normalized to canonical slug form and must be unique within the workspace. Unlike create it
-// does not auto-suffix, so a rename onto a taken handle is an error. Mirrors workspace.SetName.
-func (s *Service) SetName(app *models.Application, newName string) error {
-	name := slug.Make(newName, "")
-	if name == "" {
-		return ErrNameInvalid
-	}
-	if name == app.Name {
-		return nil
-	}
-	exists, err := s.apps.ExistsByName(app.WorkspaceID, name)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return ErrSlugTaken
-	}
-	app.Name = name
-	return nil
 }
 
 // IDByUID resolves an application's portable uid to its numeric id.
