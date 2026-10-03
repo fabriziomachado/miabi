@@ -40,7 +40,7 @@ const (
 // CSRF); non-browser clients (CLI, API) keep using the Authorization header.
 const SessionCookieName = "miabi_session"
 
-func baseJWT(cfg *config.Config, store *session.Store) okapi.JWTAuth {
+func baseJWT(cfg *config.Config, store *session.Store, users *repositories.UserRepository) okapi.JWTAuth {
 	a := okapi.JWTAuth{
 		SigningSecret: []byte(cfg.JWTSecret),
 		Audience:      "miabi",
@@ -56,12 +56,13 @@ func baseJWT(cfg *config.Config, store *session.Store) okapi.JWTAuth {
 	a.OnUnauthorized = func(c *okapi.Context) error {
 		return c.AbortUnauthorized("invalid or expired session")
 	}
-	if store != nil {
-		a.ValidateClaims = func(c *okapi.Context, claims jwt.Claims) error {
-			mc, ok := claims.(jwt.MapClaims)
-			if !ok {
-				return nil
-			}
+	key := []byte(cfg.JWTSecret)
+	a.ValidateClaims = func(c *okapi.Context, claims jwt.Claims) error {
+		mc, ok := claims.(jwt.MapClaims)
+		if !ok {
+			return nil
+		}
+		if store != nil {
 			jti, _ := mc["jti"].(string)
 			if jti == "" {
 				return errors.New("invalid token: missing jti")
@@ -69,16 +70,40 @@ func baseJWT(cfg *config.Config, store *session.Store) okapi.JWTAuth {
 			if store.IsRevoked(c.Request().Context(), jti) {
 				return errors.New("session has been revoked")
 			}
-			return nil
 		}
+		if users != nil {
+			return checkSessionUser(users, key, mc)
+		}
+		return nil
 	}
 	return a
 }
 
+// checkSessionUser ends a session whose user is gone, disabled, or has changed password since it was
+// issued: a token alone outlives all three for up to its 24 h lifetime. API keys reload the user too.
+func checkSessionUser(users *repositories.UserRepository, key []byte, mc jwt.MapClaims) error {
+	sub, ok := mc["sub"].(float64)
+	if !ok || sub <= 0 {
+		return errors.New("invalid token: missing subject")
+	}
+	user, err := users.FindByID(uint(sub))
+	if err != nil {
+		return errors.New("session is no longer valid")
+	}
+	if !user.Active {
+		return errors.New("account is disabled")
+	}
+	// A token minted before the fingerprint existed carries none; it still expires within TokenTTL.
+	if pwf, has := mc[auth.ClaimPasswordFingerprint].(string); has && pwf != auth.SessionFingerprint(key, user.PasswordHash) {
+		return errors.New("session ended by a password change")
+	}
+	return nil
+}
+
 // JWTAuth builds user JWT auth (Authorization header or session cookie, per
 // baseJWT's TokenLookup). Revoked sessions are rejected.
-func JWTAuth(cfg *config.Config, store *session.Store) okapi.JWTAuth {
-	return baseJWT(cfg, store)
+func JWTAuth(cfg *config.Config, store *session.Store, users *repositories.UserRepository) okapi.JWTAuth {
+	return baseJWT(cfg, store, users)
 }
 
 // Authenticate accepts a user JWT or an API key. API keys (mb_...) are read from the Authorization

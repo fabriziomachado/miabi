@@ -7,6 +7,7 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -124,13 +125,26 @@ func (s *Service) IssueToken(user *models.User) (token, jti string, err error) {
 	}
 	jti = uuid.NewString()
 	token, err = okapi.GenerateJwtToken(s.jwtKey, jwt.MapClaims{
-		"sub":   user.ID,
-		"email": user.Email,
-		"role":  string(user.Role),
-		"aud":   s.aud,
-		"jti":   jti,
+		"sub":                    user.ID,
+		"email":                  user.Email,
+		"role":                   string(user.Role),
+		"aud":                    s.aud,
+		"jti":                    jti,
+		ClaimPasswordFingerprint: SessionFingerprint(s.jwtKey, user.PasswordHash),
 	}, TokenTTL)
 	return token, jti, err
+}
+
+// ClaimPasswordFingerprint is the session claim binding a token to the password it was issued under.
+const ClaimPasswordFingerprint = "pwf"
+
+// SessionFingerprint keys the user's password hash with the JWT secret, so a session carries proof of
+// the password it was issued under without carrying the hash. Any password change, however it is
+// made, changes it and so ends every older session.
+func SessionFingerprint(key []byte, passwordHash string) string {
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte("miabi-session:" + passwordHash))
+	return hex.EncodeToString(m.Sum(nil))[:16]
 }
 
 // Revoke blacklists a session by its jti until its natural expiry.
@@ -204,26 +218,26 @@ func (s *Service) ConfirmEmailVerification(rawToken string) (*models.User, error
 	return user, nil
 }
 
-// ResetPassword consumes a reset token and sets a new password.
-func (s *Service) ResetPassword(rawToken, newPassword string) error {
+// ResetPassword consumes a reset token, sets a new password and returns the user's id.
+func (s *Service) ResetPassword(rawToken, newPassword string) (uint, error) {
 	rec, err := s.resets.FindValidByHash(hashToken(rawToken))
 	if err != nil {
-		return ErrInvalidToken
+		return 0, ErrInvalidToken
 	}
 	user, err := s.users.FindByID(rec.UserID)
 	if err != nil {
-		return ErrInvalidToken
+		return 0, ErrInvalidToken
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	user.PasswordHash = string(hash)
 	user.MustChangePassword = false // the user set their own password
 	if err := s.users.Update(user); err != nil {
-		return err
+		return 0, err
 	}
-	return s.resets.MarkUsed(rec.ID)
+	return user.ID, s.resets.MarkUsed(rec.ID)
 }
 
 // ChangePassword verifies an authenticated user's current password and sets a new one. Distinct from the
