@@ -106,6 +106,7 @@ func (h *ApplyHandler) Apply(c *okapi.Context, req *ApplyRequest) error {
 
 	opts := apply.Options{Prune: req.Body.Prune, Admin: h.placer.admin(c)}
 	if req.Body.DryRun {
+		opts.CheckReferences = true
 		plan, _, err := h.svc.Plan(ctx, wsID, []byte(req.Body.Manifests), opts)
 		if err != nil {
 			return h.mapErr(c, err)

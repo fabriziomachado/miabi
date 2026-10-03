@@ -510,6 +510,10 @@ type Options struct {
 	// Admin marks an apply run by a platform admin, who may create in restricted locations. GitOps never
 	// sets it: a sync acts on nobody's behalf.
 	Admin bool
+	// CheckReferences fails the plan on a {{ … }} reference to something that exists neither in the
+	// bundle nor in the workspace. For previews: a real apply still converges everything else and
+	// records the app that cannot render as a failure.
+	CheckReferences bool
 }
 
 type adminCtxKey struct{}
@@ -576,6 +580,12 @@ func (s *Service) Plan(ctx context.Context, workspaceID uint, manifests []byte, 
 	desired, err := declarative.Parse(manifests)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %v", ErrInvalidManifest, err)
+	}
+	// Before rendering, which replaces every reference it can resolve with its value.
+	if opts.CheckReferences {
+		if err := declarative.CheckReferences(desired.References(), s.knownNames(workspaceID, desired)); err != nil {
+			return nil, nil, fmt.Errorf("%w: %v", ErrInvalidManifest, err)
+		}
 	}
 	s.render(workspaceID, desired)
 	actual, err := s.snapshot(ctx, workspaceID)
@@ -862,6 +872,32 @@ func (s *Service) render(workspaceID uint, desired *declarative.ResourceSet) {
 		}
 	}
 	s.stampConfigFP(workspaceID, desired)
+}
+
+// knownNames is every name a reference in desired may resolve to: those declared in the bundle and
+// those live in the workspace. Inputs exist only in marketplace templates, never in an apply.
+func (s *Service) knownNames(workspaceID uint, desired *declarative.ResourceSet) declarative.KnownNames {
+	known := declarative.KnownNames{"databases": {}, "secrets": {}, "applications": {}, "inputs": {}}
+	for name := range s.databaseViews(workspaceID) {
+		known["databases"][name] = true
+	}
+	for name := range s.secretViews(workspaceID) {
+		known["secrets"][name] = true
+	}
+	for name := range s.appViews(workspaceID, desired) {
+		known["applications"][name] = true
+	}
+	for _, r := range desired.All() {
+		switch r.Kind {
+		case declarative.KindDatabase:
+			known["databases"][r.Metadata.Name] = true
+		case declarative.KindSecret:
+			known["secrets"][r.Metadata.Name] = true
+		case declarative.KindApplication:
+			known["applications"][r.Metadata.Name] = true
+		}
+	}
+	return known
 }
 
 // stampConfigFP gives every application the fingerprint of the configs it mounts,

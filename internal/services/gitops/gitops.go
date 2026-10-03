@@ -212,7 +212,7 @@ func (s *Service) Diff(ctx context.Context, workspaceID, id uint) (*declarative.
 	if err != nil {
 		return nil, err
 	}
-	plan, _, err := s.applier.Plan(ctx, workspaceID, manifests, apply.Options{Prune: src.Prune, OwnerSource: sourceLabel(src)})
+	plan, _, err := s.applier.Plan(ctx, workspaceID, manifests, apply.Options{Prune: src.Prune, OwnerSource: sourceLabel(src), CheckReferences: true})
 	return plan, err
 }
 
