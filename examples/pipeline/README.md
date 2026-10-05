@@ -15,6 +15,8 @@ See [pipeline.yaml](pipeline.yaml) (minimal),
 deploy + schedule), and [pipeline-repository.yaml](pipeline-repository.yaml)
 (build a repository with no application attached — see
 [Build a repository without an application](#build-a-repository-without-an-application)).
+For a Laravel + React (Inertia) app that builds into the registry and promotes
+via GitOps, see [../laravel-inertia/](../laravel-inertia/).
 
 ```bash
 BASE=https://miabi.example.com   # your Miabi URL

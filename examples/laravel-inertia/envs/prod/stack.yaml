@@ -1,0 +1,101 @@
+# Production desired state — same shape as dev, digest-pinned and scheduled as
+# a Swarm service. Promotion = commit that bumps `digest` (and usually `tag`)
+# to the pipeline's $MIABI_IMAGE_DIGEST. A revert commit rolls back.
+#
+# Uploads: with replicas > 1 across nodes, use a shared storageClass (NFS/CIFS)
+# or S3 — a node-local volume is not visible to every task. See ../../README.md.
+apiVersion: miabi.io/v1
+kind: Database
+metadata: { name: laravel-db }
+spec:
+  engine: postgres
+  version: "16-alpine"
+  instance: dedicated
+---
+apiVersion: miabi.io/v1
+kind: Volume
+metadata: { name: laravel-uploads }
+spec:
+  size: 20Gi
+  # Uncomment when the admin has registered shared storage for multi-replica:
+  # storageClass: nfs-shared
+---
+apiVersion: miabi.io/v1
+kind: Secret
+metadata: { name: laravel-app-key }
+spec:
+  generate: true
+  length: 48
+---
+apiVersion: miabi.io/v1
+kind: Application
+metadata: { name: laravel-app }
+spec:
+  image: registry.example.com/ws_1/laravel-app
+  tag: "42"
+  # CI / pipeline writes the immutable digest here; GitOps converges Swarm to it.
+  digest: "sha256:6b3a1f0d9c2e4a5b8d7c6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b"
+  ports:
+    - container: 8080
+      scheme: http
+  deployment:
+    runtime: service          # replicated Swarm service (needs a Swarm location)
+    replicas: 2
+    strategy: rolling
+    update:
+      parallelism: 1
+      delaySeconds: 15
+  healthcheck:
+    type: http
+    path: /up
+    port: 8080
+    intervalSeconds: 10
+    startPeriodSeconds: 45
+    retries: 3
+  env:
+    APP_NAME: Laravel
+    APP_ENV: production
+    APP_DEBUG: "false"
+    APP_URL: "https://laravel.example.com"
+    # CHANGE ME — production APP_KEY (never reuse the dev key).
+    APP_KEY: "base64:change-me-to-a-real-laravel-app-key========"
+
+    LOG_CHANNEL: stderr
+    LOG_LEVEL: info
+
+    DB_CONNECTION: pgsql
+    DB_HOST: "{{ .databases.laravel-db.host }}"
+    DB_PORT: "{{ .databases.laravel-db.port }}"
+    DB_DATABASE: "{{ .databases.laravel-db.name }}"
+    DB_USERNAME: "{{ .databases.laravel-db.user }}"
+    DB_PASSWORD: "{{ .databases.laravel-db.password }}"
+
+    FILESYSTEM_DISK: public
+    SESSION_DRIVER: database
+    CACHE_STORE: database
+    QUEUE_CONNECTION: database
+  secretEnv:
+    - APP_KEY
+    - DB_PASSWORD
+  mounts:
+    - volume: laravel-uploads
+      path: /var/www/html/storage/app/public
+  resources:
+    memory: 1Gi
+    cpu: "1"
+---
+apiVersion: miabi.io/v1
+kind: Domain
+metadata: { name: laravel.example.com }
+spec:
+  tls: acme
+  wildcard: true
+---
+apiVersion: miabi.io/v1
+kind: Route
+metadata: { name: laravel-app-prod }
+spec:
+  hosts: [laravel.example.com]
+  app: laravel-app
+  port: 8080
+  tls: acme

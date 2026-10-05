@@ -1,0 +1,102 @@
+# Dev desired state — Laravel + React (Inertia) with managed Postgres and a
+# persistent volume for public disk uploads. Point a GitSource at this folder
+# (see ../../README.md). Image tag tracks what the pipeline last deployed;
+# pin a digest in prod.
+#
+# Replace:
+#   • registry.example.com/ws_1/laravel-app  → your Miabi registry + app repo
+#   • APP_KEY                                → a real `php artisan key:generate` value
+#   • hosts                                  → hostnames under a Domain you own
+apiVersion: miabi.io/v1
+kind: Database
+metadata: { name: laravel-db }
+spec:
+  engine: postgres
+  version: "16-alpine"
+  instance: auto
+---
+apiVersion: miabi.io/v1
+kind: Volume
+metadata: { name: laravel-uploads }
+spec:
+  # Public disk for uploaded images (FILESYSTEM_DISK=public).
+  # Single-replica / node-local is fine in dev.
+  size: 5Gi
+---
+apiVersion: miabi.io/v1
+kind: Secret
+metadata: { name: laravel-app-key }
+spec:
+  # Documents a generated secret in the workspace vault. Apply/GitOps cannot
+  # interpolate {{ .secrets.* }} (marketplace-only) — set APP_KEY on the app
+  # below (or in the console) before first boot.
+  generate: true
+  length: 48
+---
+apiVersion: miabi.io/v1
+kind: Application
+metadata: { name: laravel-app }
+spec:
+  # Built by .miabi/pipeline.yaml → pushed to the workspace registry.
+  image: registry.example.com/ws_1/laravel-app
+  tag: "dev"
+  ports:
+    - container: 8080
+      scheme: http
+  deployment:
+    strategy: rolling
+    runtime: container
+  healthcheck:
+    type: http
+    path: /up
+    port: 8080
+    intervalSeconds: 15
+    startPeriodSeconds: 30
+  env:
+    APP_NAME: Laravel
+    APP_ENV: local
+    APP_DEBUG: "true"
+    APP_URL: "https://dev.laravel.example.com"
+    # CHANGE ME — `php artisan key:generate --show` (base64:…). Listed under secretEnv.
+    APP_KEY: "base64:change-me-to-a-real-laravel-app-key========"
+
+    LOG_CHANNEL: stderr
+    LOG_LEVEL: debug
+
+    DB_CONNECTION: pgsql
+    DB_HOST: "{{ .databases.laravel-db.host }}"
+    DB_PORT: "{{ .databases.laravel-db.port }}"
+    DB_DATABASE: "{{ .databases.laravel-db.name }}"
+    DB_USERNAME: "{{ .databases.laravel-db.user }}"
+    DB_PASSWORD: "{{ .databases.laravel-db.password }}"
+
+    # Local public disk → volume mount below. Run `php artisan storage:link` in the image or entrypoint.
+    FILESYSTEM_DISK: public
+    SESSION_DRIVER: database
+    CACHE_STORE: database
+    QUEUE_CONNECTION: database
+  secretEnv:
+    - APP_KEY
+    - DB_PASSWORD
+  mounts:
+    - volume: laravel-uploads
+      path: /var/www/html/storage/app/public
+  resources:
+    memory: 512Mi
+    cpu: "0.5"
+---
+apiVersion: miabi.io/v1
+kind: Domain
+metadata: { name: laravel.example.com }
+spec:
+  tls: acme
+  wildcard: true
+---
+apiVersion: miabi.io/v1
+kind: Route
+metadata: { name: laravel-app-dev }
+spec:
+  hosts: [dev.laravel.example.com]
+  app: laravel-app
+  port: 8080
+  tls: acme

@@ -23,10 +23,15 @@ examples/
 │   │   ├── dev/stack.yaml        # dev desired state
 │   │   └── prod/stack.yaml       # prod desired state (digest-pinned)
 │   └── okapi-example/stack.yaml  # single-app example (the okapi-example template as GitOps)
-└── pipeline/
-    ├── README.md                # triggering a pipeline from Git (webhook / CI / schedule)
-    ├── pipeline.yaml            # minimal test → build → deploy
-    └── pipeline-multistage.yaml # test → build → scan → deploy + schedule
+├── pipeline/
+│   ├── README.md                # triggering a pipeline from Git (webhook / CI / schedule)
+│   ├── pipeline.yaml            # minimal test → build → deploy
+│   └── pipeline-multistage.yaml # test → build → scan → deploy + schedule
+└── laravel-inertia/             # Laravel + React/Inertia + Postgres + uploads (GitOps + Pipeline)
+    ├── README.md                #   end-to-end flow: build → registry → Swarm / promote digest
+    ├── Dockerfile               #   sample multi-stage image (Composer + Vite + PHP)
+    ├── .miabi/pipeline.yaml     #   test → build → scan → deploy
+    └── envs/{dev,prod}/stack.yaml
 ```
 
 ## Resource kinds (`miabi.io/v1`)
@@ -91,6 +96,11 @@ curl -X POST "$BASE/api/v1/workspaces/$WS/apply" \
 
 Commit the `gitops/` tree to a repo, then create a GitSource per environment —
 see [gitops/README.md](gitops/README.md).
+
+For a full **Laravel + React (Inertia) + Postgres + image uploads** walkthrough
+that pairs GitOps stacks with a pipeline-as-code build into the built-in
+registry (and Swarm in prod), see
+[laravel-inertia/README.md](laravel-inertia/README.md).
 
 ## 3. Pipelines (CI/CD)
 

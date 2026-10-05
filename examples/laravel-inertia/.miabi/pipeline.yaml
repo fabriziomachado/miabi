@@ -1,0 +1,65 @@
+# Pipeline-as-code for a Laravel + React (Inertia) app.
+# Keep this at .miabi/pipeline.yaml in the application repository so Miabi can
+# adopt it as a repo-owned pipeline (see examples/laravel-inertia/README.md).
+#
+# Flow:
+#   push → checkout commit → PHP + frontend checks → build image → registry
+#   (optional) deploy to the bound app — keep for continuous-dev; omit for
+#   digest-promotion into GitOps prod.
+#
+# After `uses: build`, later steps see:
+#   $MIABI_IMAGE          registry ref (repo:tag)
+#   $MIABI_IMAGE_DIGEST   immutable repo@sha256:… form — pin this in envs/prod
+#   $MIABI_COMMIT         checked-out SHA
+#   $MIABI_RUN_NUMBER     monotonic run number
+apiVersion: miabi.io/v1
+kind: Pipeline
+metadata:
+  name: laravel-app
+on:
+  push:
+    branches: [main]
+  manual: true
+env:
+  APP_ENV: testing
+  # Optional: private Composer / npm tokens from the workspace vault.
+  # COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
+  # NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+steps:
+  # PHP unit / feature tests (adjust the image tag to your PHP version).
+  - name: test-php
+    image: php:8.4-cli
+    env:
+      CI: "true"
+    run: >
+      apt-get update -qq && apt-get install -y -qq git unzip libpq-dev >
+      /dev/null && docker-php-ext-install pdo_pgsql >/dev/null &&
+      curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer &&
+      composer install --no-interaction --prefer-dist &&
+      php artisan test --parallel
+
+  # Vite / Inertia frontend: typecheck or unit tests if you have them.
+  - name: test-frontend
+    image: node:22
+    env:
+      CI: "true"
+    run: "npm ci && npm run build"
+
+  # Builds the Dockerfile at the repo root, records Image + digest, pushes to
+  # the workspace's built-in registry (required for Swarm / multi-node pull).
+  - name: build
+    uses: build
+    dockerfile: Dockerfile
+    cache: true
+
+  # Optional vulnerability scan of the image just pushed.
+  - name: scan
+    image: aquasec/trivy:latest
+    continue-on-error: true
+    run: "TRIVY_USERNAME=$MIABI_REGISTRY_USER TRIVY_PASSWORD=$MIABI_REGISTRY_TOKEN trivy image --exit-code 1 --severity HIGH,CRITICAL $MIABI_IMAGE"
+
+  # Continuous deploy to the pipeline's bound application (typical for dev).
+  # For prod GitOps: delete this step and promote by committing
+  # $MIABI_IMAGE_DIGEST into envs/prod/stack.yaml instead.
+  - name: deploy
+    uses: deploy

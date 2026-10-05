@@ -77,3 +77,7 @@ A verified push triggers an immediate sync.
 Promote dev → prod by committing the tested image's digest into
 `envs/prod/stack.yaml` (a revert commit rolls back). The prod GitSource
 reconciles the change — auditable and reproducible.
+
+For a full stack that pairs this promotion model with a **pipeline build** into
+Miabi's registry (Laravel + React/Inertia, Postgres, upload volume, Swarm in
+prod), see [../laravel-inertia/](../laravel-inertia/).
