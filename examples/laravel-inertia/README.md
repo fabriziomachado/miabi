@@ -144,14 +144,22 @@ local volume. Otherwise each replica sees a different disk.
 
 ## Sample Dockerfile notes
 
-The included `Dockerfile` builds on **`serversideup/php:*-frankenphp`**
-([FrankenPHP variation](https://serversideup.net/open-source/docker-php/docs/image-variations/frankenphp)):
-Composer + Vite, then a single-process Caddy/PHP runtime on port **8080**.
-Point `uses: build` at it (default `Dockerfile` at the repo root).
+The included `Dockerfile` follows the
+[serversideup packaging guide](https://serversideup.net/open-source/docker-php/docs/deployment-and-production/packaging-your-app-for-deployment):
 
-Prefer the **debian** tag if you hit alpine FrankenPHP performance issues
-(noted by upstream). For maximum throughput with Laravel Octane, override the
-Application `command` (see below) — classic mode is the safer default.
+| Tool | In `serversideup/php`? | Where it runs |
+|---|---|---|
+| **composer** | Yes (every variation) | Inside the FrankenPHP stage, as `www-data` |
+| **install-php-extensions** | Yes | `USER root` only for extras (`intl`). `pdo_pgsql` is already installed |
+| **npm / node / bun** | No | Separate `node` stage; only `public/build` is copied in |
+
+Do **not** set `APP_*`, `SSL_MODE`, `HEALTHCHECK_PATH`, or `AUTORUN_*` in the
+Dockerfile. The image entrypoint reads those at **container start** (Miabi
+`spec.env`). Baking them in fights the same-image-everywhere model, and secrets
+must never be `ENV` in the image.
+
+OPcache ships installed but **disabled** until `PHP_OPCACHE_ENABLE=1` (set in
+the stacks).
 
 ## serversideup / Laravel peculiarities (mapped to Miabi)
 

@@ -63,6 +63,7 @@ spec:
 
     LOG_CHANNEL: stderr
     LOG_LEVEL: debug
+    PHP_OPCACHE_ENABLE: "1"
 
     DB_CONNECTION: pgsql
     DB_HOST: "{{ .databases.laravel-db.host }}"

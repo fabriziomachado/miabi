@@ -1,58 +1,46 @@
-# Sample multi-stage image for Laravel + React (Inertia / Vite) on
-# serversideup/php FrankenPHP — the variation recommended for new Laravel apps.
-# Docs: https://serversideup.net/open-source/docker-php/docs/image-variations/frankenphp
+# Production image following serversideup/php packaging guidance:
+# https://serversideup.net/open-source/docker-php/docs/deployment-and-production/packaging-your-app-for-deployment
 #
-# Stages:
-#   1. composer  — PHP dependencies
-#   2. frontend  — npm ci + vite build (Inertia React)
-#   3. runtime   — FrankenPHP (Caddy + PHP in one process) on :8080
+# The FrankenPHP image already includes composer, PHP CLI, pdo_pgsql, and
+# install-php-extensions. It does NOT include Node, npm, or Bun — front-end
+# assets are built in a separate stage and copied in.
+#
+# Runtime behaviour (SSL, health path, AUTORUN, PHP ini, APP_*) is NOT baked
+# here. Those are environment variables applied when the container starts
+# (see envs/*/stack.yaml).
 
-# ── 1. Composer ──────────────────────────────────────────────────────────────
-FROM composer:2 AS vendor
+# ── Frontend (npm is not in serversideup/php) ────────────────────────────────
+FROM node:22-alpine AS assets
 WORKDIR /app
-COPY composer.json composer.lock ./
+COPY package.json package-lock.json* ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# ── Runtime ──────────────────────────────────────────────────────────────────
+# Pin a version. Prefer the Debian tag; upstream notes alpine FrankenPHP
+# performance issues. Tag without -alpine is Debian.
+FROM serversideup/php:8.4-frankenphp
+
+# Root only to add extensions that are not in the image. pdo_pgsql, redis,
+# zip, opcache, and pcntl already ship. intl is the usual Laravel extra.
+USER root
+RUN install-php-extensions intl
+USER www-data
+
+WORKDIR /var/www/html
+
+# composer is already on PATH and COMPOSER_HOME is writable by www-data.
+COPY --chown=www-data:www-data composer.json composer.lock ./
 RUN composer install \
       --no-dev \
       --no-interaction \
       --no-scripts \
       --prefer-dist \
       --optimize-autoloader
-COPY . .
-RUN composer dump-autoload --optimize --no-dev
 
-# ── 2. Frontend (Vite / Inertia React) ───────────────────────────────────────
-FROM node:22-alpine AS frontend
-WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
-COPY . .
-COPY --from=vendor /app/vendor ./vendor
-RUN npm run build
-
-# ── 3. Runtime (FrankenPHP) ──────────────────────────────────────────────────
-# Unprivileged www-data; HTTP on 8080 (Miabi / Goma terminate TLS upstream).
-# Prefer debian over alpine if you hit FrankenPHP alpine perf issues.
-FROM serversideup/php:8.4-frankenphp
-WORKDIR /var/www/html
-
-USER root
 COPY --chown=www-data:www-data . .
-COPY --from=vendor --chown=www-data:www-data /app/vendor ./vendor
-COPY --from=frontend --chown=www-data:www-data /app/public/build ./public/build
+RUN composer dump-autoload --optimize --no-dev \
+ && mkdir -p storage/app/public bootstrap/cache
 
-# Uploads volume mounts at storage/app/public; AUTORUN also runs storage:link.
-RUN mkdir -p storage/app/public bootstrap/cache \
- && chown -R www-data:www-data storage bootstrap/cache
-
-USER www-data
-
-# Classic FrankenPHP mode (safe default). For Octane worker mode, override the
-# Application command to:
-#   ["php", "artisan", "octane:start", "--server=frankenphp", "--port=8080"]
-# and switch healthcheck to the image's healthcheck-octane (see README).
-ENV APP_ENV=production \
-    LOG_CHANNEL=stderr \
-    SSL_MODE=off \
-    CADDY_SERVER_ROOT=/var/www/html/public \
-    HEALTHCHECK_PATH=/up
-EXPOSE 8080
+COPY --from=assets --chown=www-data:www-data /app/public/build ./public/build
