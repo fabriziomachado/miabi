@@ -144,7 +144,53 @@ local volume. Otherwise each replica sees a different disk.
 
 ## Sample Dockerfile notes
 
-The included `Dockerfile` is illustrative: Composer install, `npm ci` +
-`npm run build` (Vite / Inertia), then a PHP-FPM + Nginx runtime image. Point
-`uses: build` at it (default `Dockerfile` at the repo root). Adapt the base
-images and the document root to match your real Laravel layout.
+The included `Dockerfile` builds on **`serversideup/php:*-frankenphp`**
+([FrankenPHP variation](https://serversideup.net/open-source/docker-php/docs/image-variations/frankenphp)):
+Composer + Vite, then a single-process Caddy/PHP runtime on port **8080**.
+Point `uses: build` at it (default `Dockerfile` at the repo root).
+
+Prefer the **debian** tag if you hit alpine FrankenPHP performance issues
+(noted by upstream). For maximum throughput with Laravel Octane, override the
+Application `command` (see below) — classic mode is the safer default.
+
+## serversideup / Laravel peculiarities (mapped to Miabi)
+
+These come from the serversideup Laravel guides and matter in this stack:
+
+### FrankenPHP behind Miabi
+
+| Concern | What to do |
+|---|---|
+| Ports | Container listens on **8080** (unprivileged). Miabi Route → 8080. |
+| TLS | Set **`SSL_MODE=off`**. Miabi/Goma terminate HTTPS; do not enable Caddy auto-HTTPS inside the pod (`CADDY_AUTO_HTTPS` stays off). |
+| Document root | Default `CADDY_SERVER_ROOT=/var/www/html/public` — correct for Laravel. |
+| Health | Image default is `/healthcheck` (web server only). Stacks set **`HEALTHCHECK_PATH=/up`** and Miabi probes `/up` so Laravel itself must be ready. |
+
+### Laravel Automations (`AUTORUN_*`)
+
+[Automations](https://serversideup.net/open-source/docker-php/docs/framework-guides/laravel/automations) are **off by default**. The stacks enable them in deployed envs:
+
+- `AUTORUN_ENABLED=true` — master switch (required).
+- On boot: `storage:link`, `migrate --force`, `optimize` (config/route/view/event cache).
+- A failed automation **exits non-zero** → container never becomes healthy. Use `AUTORUN_DEBUG=true` / `LOG_OUTPUT_LEVEL=debug` to diagnose.
+- **`config:cache` means `.env` is no longer read at runtime** — every config value must come from real env vars (as in these manifests).
+- Swarm with `replicas: > 1`: set **`AUTORUN_LARAVEL_MIGRATION_ISOLATION=true`** and a shared cache driver (`CACHE_STORE=database` here, or Redis). Never use `fresh`/`refresh` migration modes in prod.
+- Never enable Automations as a substitute for a failed deploy smoke test — catch bad migrations in the pipeline's `test-php` step first.
+
+### Side processes (same image, different command)
+
+serversideup expects **one process per container**. Scale workers as separate Miabi Applications that reuse the same image:
+
+| Role | `command` | Healthcheck |
+|---|---|---|
+| Web (classic) | image default | HTTP `/up` |
+| Octane worker | `php artisan octane:start --server=frankenphp --port=8080` | prefer image `healthcheck-octane` (command); Octane's Caddyfile may ignore some `CADDY_*` envs |
+| Queue | `php artisan queue:work --tries=3` | `type: none` or a command check — see [queue](https://serversideup.net/open-source/docker-php/docs/framework-guides/laravel/queue) |
+| Scheduler | `php artisan schedule:work` | same pattern — [task-scheduler](https://serversideup.net/open-source/docker-php/docs/framework-guides/laravel/task-scheduler) |
+| Horizon / Reverb | dedicated apps + Redis | dedicated health scripts in the image |
+
+Do **not** put cron inside the web container; use `schedule:work` as its own app.
+
+### Permissions & uploads
+
+Images run as **`www-data`** (Debian `33:33`). Copy with `--chown=www-data:www-data`. The uploads volume must be writable by that uid. Changing UID at runtime is not supported — only at **build** via their `docker-php-serversideup-set-id` helpers ([file permissions](https://serversideup.net/open-source/docker-php/docs/guide/understanding-file-permissions)).

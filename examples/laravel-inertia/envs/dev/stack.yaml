@@ -51,7 +51,8 @@ spec:
     path: /up
     port: 8080
     intervalSeconds: 15
-    startPeriodSeconds: 30
+    # AUTORUN may wait up to ~30s for DB then migrate + optimize before /up answers.
+    startPeriodSeconds: 60
   env:
     APP_NAME: Laravel
     APP_ENV: local
@@ -70,11 +71,25 @@ spec:
     DB_USERNAME: "{{ .databases.laravel-db.user }}"
     DB_PASSWORD: "{{ .databases.laravel-db.password }}"
 
-    # Local public disk → volume mount below. Run `php artisan storage:link` in the image or entrypoint.
+    # Local public disk → volume mount below. AUTORUN runs storage:link on boot.
     FILESYSTEM_DISK: public
     SESSION_DRIVER: database
     CACHE_STORE: database
     QUEUE_CONNECTION: database
+
+    # serversideup/php FrankenPHP — TLS ends at Miabi/Goma, not inside the container.
+    # https://serversideup.net/open-source/docker-php/docs/image-variations/frankenphp
+    SSL_MODE: "off"
+    HEALTHCHECK_PATH: /up
+    CADDY_SERVER_ROOT: /var/www/html/public
+
+    # Laravel Automations (disabled by default in the image; enable in deployed envs).
+    # https://serversideup.net/open-source/docker-php/docs/framework-guides/laravel/automations
+    AUTORUN_ENABLED: "true"
+    AUTORUN_LARAVEL_STORAGE_LINK: "true"
+    AUTORUN_LARAVEL_MIGRATION: "true"
+    AUTORUN_LARAVEL_MIGRATION_FORCE: "true"
+    AUTORUN_LARAVEL_OPTIMIZE: "true"
   secretEnv:
     - APP_KEY
     - DB_PASSWORD

@@ -50,7 +50,8 @@ spec:
     path: /up
     port: 8080
     intervalSeconds: 10
-    startPeriodSeconds: 45
+    # AUTORUN migrate + optimize; isolation lock may wait under rolling Swarm updates.
+    startPeriodSeconds: 90
     retries: 3
   env:
     APP_NAME: Laravel
@@ -74,6 +75,20 @@ spec:
     SESSION_DRIVER: database
     CACHE_STORE: database
     QUEUE_CONNECTION: database
+
+    # serversideup/php FrankenPHP behind Miabi's gateway (TLS at the edge).
+    SSL_MODE: "off"
+    HEALTHCHECK_PATH: /up
+    CADDY_SERVER_ROOT: /var/www/html/public
+
+    # Laravel Automations — migrate + optimize on boot.
+    # Isolation matters with Swarm replicas > 1 (shared cache driver required).
+    AUTORUN_ENABLED: "true"
+    AUTORUN_LARAVEL_STORAGE_LINK: "true"
+    AUTORUN_LARAVEL_MIGRATION: "true"
+    AUTORUN_LARAVEL_MIGRATION_FORCE: "true"
+    AUTORUN_LARAVEL_MIGRATION_ISOLATION: "true"
+    AUTORUN_LARAVEL_OPTIMIZE: "true"
   secretEnv:
     - APP_KEY
     - DB_PASSWORD
