@@ -191,6 +191,31 @@ func (r *Router) applicationRoutes() []okapi.RouteDefinition {
 			Handler:     r.h.database.DetachFromApp,
 			Summary:     "Detach a database from the app",
 		},
+		{
+			Method:      http.MethodPut,
+			Path:        base + "/{appID}/database-instances/{databaseID}",
+			Group:       apps,
+			Middlewares: scoped(models.WorkspaceRoleDeveloper),
+			Handler:     okapi.H(r.h.database.LinkInstanceToApp),
+			Summary:     "Link a database instance (Redis) to the app",
+			Request:     &handlers.AttachDatabaseRequest{},
+		},
+		{
+			Method:      http.MethodDelete,
+			Path:        base + "/{appID}/database-instances/{databaseID}",
+			Group:       apps,
+			Middlewares: scoped(models.WorkspaceRoleDeveloper),
+			Handler:     r.h.database.UnlinkInstanceFromApp,
+			Summary:     "Unlink a database instance from the app",
+		},
+		{
+			Method:      http.MethodGet,
+			Path:        base + "/{appID}/database-instances/{databaseID}/connection",
+			Group:       apps,
+			Middlewares: scoped(models.WorkspaceRoleDeveloper),
+			Handler:     r.h.database.AppInstanceConnection,
+			Summary:     "Reveal a linked database instance connection",
+		},
 
 		{
 			Method:      http.MethodPut,

@@ -39,6 +39,7 @@ var (
 	ErrNameTaken          = errors.New("a database with this name already exists on the instance")
 	ErrNoContainer        = errors.New("database has no container; re-provision it")
 	ErrInstanceInUse      = errors.New("a database on this instance is attached to an application; detach it first")
+	ErrInstanceLinked     = errors.New("this instance is linked to an application; unlink it first")
 	ErrInstanceRunning    = errors.New("stop the database before deleting it")
 	ErrNoWorkspaceNetwork = errors.New("could not resolve this workspace's network; the database was not created")
 	ErrInstanceOwned      = errors.New("database is owned by another resource")
@@ -1336,6 +1337,9 @@ func (s *Service) Delete(ctx context.Context, inst *models.DatabaseInstance) err
 			}
 		}
 	}
+	if links, err := s.repo.ListInstanceLinks(inst.ID); err == nil && len(links) > 0 {
+		return ErrInstanceLinked
+	}
 	// Refuse when the instance still backs an owning app/stack; delete the owner
 	// instead of orphaning the database. Stale owners (already gone) don't block.
 	if ref, ok := models.Owner(inst.Metadata); ok && ref.Kind != models.OwnerUser && ref.ID > 0 && s.ownerOf != nil && s.ownerOf(ref.Kind, ref.ID, inst.WorkspaceID) {
@@ -1387,9 +1391,11 @@ func (s *Service) ListDatabases(workspaceID, instanceID uint) ([]models.Database
 }
 
 // AppDatabase is a logical database enriched with its instance's engine and
-// network address, for display on an application.
+// network address, for display on an application. Kind "instance" rows are
+// instance links (Redis): ID and Name are the instance's.
 type AppDatabase struct {
 	models.Database
+	Kind         string          `json:"kind"`
 	InstanceName string          `json:"instance_name"`
 	Engine       models.DBEngine `json:"engine"`
 	Host         string          `json:"host"`
@@ -1414,8 +1420,29 @@ func (s *Service) ListByApp(workspaceID, appID uint) ([]AppDatabase, error) {
 			}
 			insts[d.InstanceID] = inst
 		}
+		d.EnvVars = InjectedKeys(inst.Engine, d.EnvPrefix, d.EnvMap, d.EnvVars)
 		out = append(out, AppDatabase{
-			Database: d, InstanceName: inst.Name, Engine: inst.Engine, Host: inst.Host, Port: inst.Port,
+			Database: d, Kind: LinkKindDatabase, InstanceName: inst.Name, Engine: inst.Engine, Host: inst.Host, Port: inst.Port,
+		})
+	}
+	links, err := s.repo.ListInstanceLinksByApp(workspaceID, appID)
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range links {
+		inst, err := s.repo.FindByID(l.InstanceID)
+		if err != nil {
+			continue
+		}
+		appID := l.ApplicationID
+		out = append(out, AppDatabase{
+			Database: models.Database{
+				ID: inst.ID, WorkspaceID: inst.WorkspaceID, InstanceID: inst.ID, Name: inst.Name,
+				Username: inst.AdminUser, Status: inst.Status, ApplicationID: &appID,
+				EnvPrefix: l.EnvPrefix, EnvMap: l.EnvMap, EnvVars: InjectedKeys(inst.Engine, l.EnvPrefix, l.EnvMap, l.EnvVars),
+				SizeBytes: inst.SizeBytes, CreatedAt: l.CreatedAt, UpdatedAt: l.UpdatedAt,
+			},
+			Kind: LinkKindInstance, InstanceName: inst.Name, Engine: inst.Engine, Host: inst.Host, Port: inst.Port,
 		})
 	}
 	return out, nil
@@ -1446,15 +1473,17 @@ func (s *Service) GetDatabase(workspaceID, id uint) (*models.Database, error) {
 }
 
 // AttachToApp links an existing logical database to an application, recording
-// the env prefix used for its injected connection vars. Returns the updated
-// database. Node-affinity and cross-app checks are the caller's responsibility.
-func (s *Service) AttachToApp(workspaceID, dbID, appID uint, envPrefix string) (*models.Database, error) {
+// the env prefix, mapping and resulting var names of its injected connection.
+// Node-affinity and cross-app checks are the caller's responsibility.
+func (s *Service) AttachToApp(workspaceID, dbID, appID uint, env EnvLink) (*models.Database, error) {
 	d, err := s.repo.FindDatabaseInWorkspace(workspaceID, dbID)
 	if err != nil {
 		return nil, ErrNotFound
 	}
 	d.ApplicationID = &appID
-	d.EnvPrefix = envPrefix
+	d.EnvPrefix = env.Prefix
+	d.EnvMap = env.Map
+	d.EnvVars = env.Vars
 	if err := s.repo.UpdateDatabase(d); err != nil {
 		return nil, err
 	}
@@ -1471,6 +1500,8 @@ func (s *Service) DetachFromApp(workspaceID, dbID uint) (*models.Database, error
 	}
 	d.ApplicationID = nil
 	d.EnvPrefix = ""
+	d.EnvMap = nil
+	d.EnvVars = nil
 	if err := s.repo.UpdateDatabase(d); err != nil {
 		return nil, err
 	}

@@ -354,8 +354,12 @@
       "emptyHint": "No databases attached. Link an existing database or create a new one on an instance.",
       "noInstances": "No database instances on this app's node.",
       "noUnattached": "No unattached databases on this instance. Switch to “＋ New database”.",
-      "prefixPlaceholder": "e.g. ANALYTICS → ANALYTICS_DATABASE_URL",
-      "prefixWarning": "This app already has an unprefixed database. Add a prefix to avoid overwriting its DATABASE_URL / DB_* vars."
+      "prefixPlaceholder": "e.g. ANALYTICS → ANALYTICS_DB_URL",
+      "envVars": "Environment variables",
+      "injectField": "Inject {field}",
+      "deprecated": "deprecated, use url",
+      "envClash": "Already injected by another linked database: {vars}. Set a prefix or rename them.",
+      "wholeInstanceHint": "{engine} has no per-app databases: the app connects to the instance, which other apps can link too."
     },
     "default": "default",
     "defaultAlwaysAttached": "(default, always attached)",

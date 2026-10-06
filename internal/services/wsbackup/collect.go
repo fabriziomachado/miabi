@@ -427,11 +427,20 @@ func (s *Service) collectDatabases(workspaceID uint, st *wsbundle.State, report 
 		}
 		for j := range dbs {
 			d := &dbs[j]
-			ld := wsbundle.LogicalDatabase{Name: d.Name, EnvPrefix: d.EnvPrefix, Metadata: d.Metadata}
+			ld := wsbundle.LogicalDatabase{Name: d.Name, EnvPrefix: d.EnvPrefix, EnvMap: d.EnvMap, Metadata: d.Metadata}
 			if d.ApplicationID != nil {
 				ld.App = appName[*d.ApplicationID]
 			}
 			entry.Databases = append(entry.Databases, ld)
+		}
+		links, err := s.Database.ListInstanceLinks(inst.ID)
+		if err != nil {
+			return fmt.Errorf("list links of %s: %w", inst.Name, err)
+		}
+		for _, l := range links {
+			if name := appName[l.ApplicationID]; name != "" {
+				entry.Links = append(entry.Links, wsbundle.InstanceLink{App: name, EnvPrefix: l.EnvPrefix, EnvMap: l.EnvMap})
+			}
 		}
 		st.Databases = append(st.Databases, entry)
 	}

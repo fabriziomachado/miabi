@@ -1878,12 +1878,16 @@ export interface LogicalDatabase {
   status: DBStatus
   application_id?: number | null
   env_prefix?: string
+  env_map?: Record<string, string>
+  env_vars?: string[]
   size_bytes?: number
   size_synced_at?: string | null
   created_at?: string
 }
 
+// kind 'instance' is a whole-instance link (Redis): id and name are the instance's.
 export interface AppDatabase extends LogicalDatabase {
+  kind: 'database' | 'instance'
   instance_name: string
   engine: DBEngine
   host: string

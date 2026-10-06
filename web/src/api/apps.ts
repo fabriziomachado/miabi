@@ -378,8 +378,17 @@ export const appApi = {
   databases(ws: number, id: number) {
     return api.get<ApiResponse<AppDatabase[]>>(`/workspaces/${ws}/apps/${id}/databases`)
   },
-  attachDatabase(ws: number, id: number, dbId: number, envPrefix = '') {
-    return api.put<ApiResponse<{ database: AppDatabase; env_injected: boolean }>>(`/workspaces/${ws}/apps/${id}/databases/${dbId}`, { env_prefix: envPrefix })
+  attachDatabase(ws: number, id: number, dbId: number, envPrefix = '', envMap?: Record<string, string>) {
+    return api.put<ApiResponse<{ database: AppDatabase; env_injected: boolean; env_vars: string[] }>>(`/workspaces/${ws}/apps/${id}/databases/${dbId}`, { env_prefix: envPrefix, env_map: envMap })
+  },
+  linkDatabaseInstance(ws: number, id: number, instId: number, envPrefix = '', envMap?: Record<string, string>) {
+    return api.put<ApiResponse<{ env_injected: boolean; env_vars: string[] }>>(`/workspaces/${ws}/apps/${id}/database-instances/${instId}`, { env_prefix: envPrefix, env_map: envMap })
+  },
+  unlinkDatabaseInstance(ws: number, id: number, instId: number) {
+    return api.delete<ApiResponse<{ message: string }>>(`/workspaces/${ws}/apps/${id}/database-instances/${instId}`)
+  },
+  databaseInstanceConnection(ws: number, id: number, instId: number) {
+    return api.get<ApiResponse<ConnectionInfo>>(`/workspaces/${ws}/apps/${id}/database-instances/${instId}/connection`)
   },
   detachDatabase(ws: number, id: number, dbId: number) {
     return api.delete<ApiResponse<{ message: string }>>(`/workspaces/${ws}/apps/${id}/databases/${dbId}`)

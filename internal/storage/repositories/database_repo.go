@@ -42,6 +42,9 @@ func (r *DatabaseRepository) Delete(id uint) error {
 		if err := tx.Where("instance_id = ?", id).Delete(&models.Database{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("instance_id = ?", id).Delete(&models.DatabaseInstanceLink{}).Error; err != nil {
+			return err
+		}
 		// Clear the network associations (join rows) so the instance row is no
 		// longer referenced by database_instance_networks.
 		if err := tx.Model(&models.DatabaseInstance{ID: id}).Association("Networks").Clear(); err != nil {
@@ -187,4 +190,40 @@ func (r *DatabaseRepository) ImageRefs() ([]string, error) {
 	err := r.db.Model(&models.DatabaseInstance{}).
 		Where("image <> ''").Pluck("image", &refs).Error
 	return refs, err
+}
+
+// SaveInstanceLink creates or updates an app's link to an instance.
+func (r *DatabaseRepository) SaveInstanceLink(l *models.DatabaseInstanceLink) error {
+	return r.db.Save(l).Error
+}
+
+// FindInstanceLink loads an app's link to an instance.
+func (r *DatabaseRepository) FindInstanceLink(workspaceID, instanceID, appID uint) (*models.DatabaseInstanceLink, error) {
+	var l models.DatabaseInstanceLink
+	err := r.db.Where("workspace_id = ? AND instance_id = ? AND application_id = ?", workspaceID, instanceID, appID).
+		First(&l).Error
+	if err != nil {
+		return nil, err
+	}
+	return &l, nil
+}
+
+// DeleteInstanceLink removes a link by id.
+func (r *DatabaseRepository) DeleteInstanceLink(id uint) error {
+	return r.db.Delete(&models.DatabaseInstanceLink{}, id).Error
+}
+
+// ListInstanceLinksByApp returns the instances linked to an application.
+func (r *DatabaseRepository) ListInstanceLinksByApp(workspaceID, appID uint) ([]models.DatabaseInstanceLink, error) {
+	var out []models.DatabaseInstanceLink
+	err := r.db.Where("workspace_id = ? AND application_id = ?", workspaceID, appID).
+		Order("created_at DESC").Find(&out).Error
+	return out, err
+}
+
+// ListInstanceLinks returns every app link to an instance.
+func (r *DatabaseRepository) ListInstanceLinks(instanceID uint) ([]models.DatabaseInstanceLink, error) {
+	var out []models.DatabaseInstanceLink
+	err := r.db.Where("instance_id = ?", instanceID).Order("created_at ASC").Find(&out).Error
+	return out, err
 }

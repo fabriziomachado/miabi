@@ -15,7 +15,7 @@ import (
 // exercised against minimal stand-in tables sharing the real table names and filter columns.
 // Every table the cascade touches must exist, or its DELETE would error.
 var wsScoped = []string{
-	"applications", "database_instances", "volumes", "domains", "stacks",
+	"applications", "database_instances", "database_instance_links", "volumes", "domains", "stacks",
 	"pipeline_runs", "pipeline_definitions", "images", "port_bindings", "jobs",
 	"backup_schedules", "volume_backup_schedules", "webhooks", "webhook_deliveries", "environments",
 	"release_approvals", "template_sources", "template_installs", "routes", "certificates",

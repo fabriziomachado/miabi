@@ -268,12 +268,23 @@ type DatabaseInstance struct {
 	Metadata     map[string]string `json:"metadata,omitempty"`
 	Annotations  map[string]string `json:"annotations,omitempty"`
 	Databases    []LogicalDatabase `json:"logical_databases,omitempty"`
+	// Links are the apps the whole instance is linked to (Redis).
+	Links []InstanceLink `json:"links,omitempty"`
+}
+
+// InstanceLink is an app's link to a whole instance and how its connection
+// lands in the app env.
+type InstanceLink struct {
+	App       string            `json:"app"`
+	EnvPrefix string            `json:"env_prefix,omitempty"`
+	EnvMap    map[string]string `json:"env_map,omitempty"`
 }
 
 // LogicalDatabase is one named database on an instance and the app it belongs to.
 type LogicalDatabase struct {
 	Name      string            `json:"name"`
 	EnvPrefix string            `json:"env_prefix,omitempty"`
+	EnvMap    map[string]string `json:"env_map,omitempty"`
 	App       string            `json:"app,omitempty"` // owning application, by name
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }

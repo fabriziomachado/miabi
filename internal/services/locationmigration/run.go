@@ -618,12 +618,16 @@ func (s *Service) switchOver(ctx context.Context, m *models.LocationMigration) e
 // swapOwner hands an app's database from one logical database to another: from the source to its restored
 // copy on a switch, and back on a rollback.
 func swapOwner(tx *gorm.DB, fromID, toID, appID uint, prefix string) error {
-	if err := tx.Model(&models.Database{}).Where("id = ?", fromID).
-		Updates(map[string]any{"application_id": nil, "env_prefix": ""}).Error; err != nil {
+	var from models.Database
+	if err := tx.Select("id", "env_map", "env_vars").First(&from, fromID).Error; err != nil {
 		return err
 	}
-	return tx.Model(&models.Database{}).Where("id = ?", toID).
-		Updates(map[string]any{"application_id": appID, "env_prefix": prefix}).Error
+	if err := tx.Model(&models.Database{}).Where("id = ?", fromID).
+		Updates(map[string]any{"application_id": nil, "env_prefix": "", "env_map": nil, "env_vars": nil}).Error; err != nil {
+		return err
+	}
+	return tx.Model(&models.Database{ID: toID}).Select("application_id", "env_prefix", "env_map", "env_vars").
+		Updates(&models.Database{ApplicationID: &appID, EnvPrefix: prefix, EnvMap: from.EnvMap, EnvVars: from.EnvVars}).Error
 }
 
 // verify deploys the running release at the target and waits for it to go live.
@@ -716,6 +720,7 @@ func (s *Service) writeReport(m *models.LocationMigration, app *models.Applicati
 }
 
 // inject writes a logical database's connection into the app's environment, the way attaching it does.
+// The database row carries the env mapping, so it must already be the app's (swapOwner runs first).
 func (s *Service) inject(app *models.Application, instanceID, databaseID uint, prefix string) error {
 	inst, err := s.Databases.FindInstance(instanceID)
 	if err != nil {
@@ -725,24 +730,12 @@ func (s *Service) inject(app *models.Application, instanceID, databaseID uint, p
 	if err != nil {
 		return err
 	}
-	conn, err := s.Databases.DatabaseConnection(inst, db)
+	vars, err := s.Databases.AppEnv(inst, db, prefix, db.EnvMap)
 	if err != nil {
 		return err
 	}
-	vars := []struct{ k, v string }{
-		{"DATABASE_URL", "${{ secrets." + database.URLSecretName(inst, db) + " }}"},
-		{"DB_HOST", conn.Host},
-		{"DB_PORT", fmt.Sprint(conn.Port)},
-		{"DB_NAME", conn.Database},
-		{"DB_USER", conn.Username},
-		{"DB_PASSWORD", "${{ secrets." + database.PasswordSecretName(inst, db) + " }}"},
-	}
 	for _, e := range vars {
-		key := e.k
-		if prefix != "" {
-			key = prefix + "_" + e.k
-		}
-		if err := s.App.SetEnvVar(app.ID, key, e.v, false); err != nil {
+		if err := s.App.SetEnvVar(app.ID, e.Key, e.Value, e.Secret); err != nil {
 			return err
 		}
 	}

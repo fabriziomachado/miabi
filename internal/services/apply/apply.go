@@ -726,7 +726,7 @@ func (s *Service) linkDatabasesToApps(workspaceID uint, raw *declarative.Resourc
 		if err != nil {
 			continue
 		}
-		_, _ = s.dbs.AttachToApp(workspaceID, db.ID, app.ID, "")
+		_, _ = s.dbs.AttachToApp(workspaceID, db.ID, app.ID, database.EnvLink{})
 	}
 }
 

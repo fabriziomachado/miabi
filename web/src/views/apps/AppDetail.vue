@@ -37,6 +37,7 @@ import type { Application, AppOverview, Deployment, Release, AppEnvVar, Route, N
 import AppModal from '@/components/AppModal.vue'
 import { fmtSize } from '@/utils/format'
 import { copyText } from '@/utils/clipboard'
+import { envFields, linksWholeInstance, prefixedName, sanitizePrefix, type DBEnvField } from '@/utils/dbEnv'
 
 // Secret-reference example built here so `}}` doesn't break the template's
 // mustache parser.
@@ -1969,7 +1970,10 @@ async function copy(text: string) {
 async function revealDatabase(d: AppDatabase) {
   if (!wid.value) return
   try {
-    const info = (await appApi.databaseConnection(wid.value, appId.value, d.id)).data.data
+    const res = d.kind === 'instance'
+      ? await appApi.databaseInstanceConnection(wid.value, appId.value, d.id)
+      : await appApi.databaseConnection(wid.value, appId.value, d.id)
+    const info = res.data.data
     if (info) dbConnModal.value = { title: d.name, info }
   } catch (e) { notify.apiError(e) }
 }
@@ -1982,14 +1986,44 @@ const instDatabases = ref<LogicalDatabase[]>([])
 const linkMode = ref<'existing' | 'new'>('existing')
 const linkForm = ref({ database_id: 0, new_name: '', env_prefix: '' })
 const linkBusy = ref(false)
+// Per-field env overrides: a custom name, or off to skip the variable.
+const envRows = ref<Record<string, { name: string; on: boolean }>>({})
+const envOpen = ref(false)
+const wholeInstance = computed(() => !!selInstance.value && linksWholeInstance(selInstance.value.engine))
+const linkFields = computed<DBEnvField[]>(() => (selInstance.value ? envFields(selInstance.value.engine) : []))
+const linkPrefix = computed(() => sanitizePrefix(linkForm.value.env_prefix))
+function envDefault(f: DBEnvField) {
+  return selInstance.value ? prefixedName(selInstance.value.engine, linkPrefix.value, f) : ''
+}
+function envResolved(f: DBEnvField) {
+  const r = envRows.value[f]
+  if (r && !r.on) return ''
+  return r?.name.trim() || envDefault(f)
+}
+const linkEnvMap = computed(() => {
+  const m: Record<string, string> = {}
+  for (const f of linkFields.value) {
+    const r = envRows.value[f]
+    if (!r) continue
+    if (!r.on) m[f] = ''
+    else if (r.name.trim()) m[f] = r.name.trim()
+  }
+  return Object.keys(m).length ? m : undefined
+})
+// Vars another link of this app already injects; attaching over them is refused server-side.
+const envClashes = computed(() => {
+  const taken = new Set(appDatabases.value.filter((d) => !(d.instance_id === selInstance.value?.id && (d.kind === 'instance' || d.id === linkForm.value.database_id))).flatMap((d) => d.env_vars ?? []))
+  return linkFields.value.map(envResolved).filter((n) => n && taken.has(n))
+})
+function resetEnvRows() {
+  envRows.value = Object.fromEntries(linkFields.value.map((f) => [f, { name: '', on: true }]))
+}
 
 // Only instances on the app's node can be attached (no cross-node service DNS).
 const instancesOnNode = computed(() => dbInstances.value.filter((i) => (i.server_id ?? 0) === (app.value?.server_id ?? 0)))
 const hiddenInstanceCount = computed(() => dbInstances.value.length - instancesOnNode.value.length)
 // Logical DBs free to attach (not already owned by an app).
 const freeDatabases = computed(() => instDatabases.value.filter((d) => !d.application_id))
-// Warn when an unprefixed attachment already exists and the user adds another.
-const hasUnprefixed = computed(() => appDatabases.value.some((d) => !d.env_prefix))
 
 async function openLink() {
   if (!wid.value) return
@@ -1998,6 +2032,7 @@ async function openLink() {
   instDatabases.value = []
   linkMode.value = 'existing'
   linkForm.value = { database_id: 0, new_name: '', env_prefix: '' }
+  envOpen.value = false
   try {
     dbInstances.value = (await databaseApi.list(wid.value)).data.data ?? []
   } catch (e) { notify.apiError(e) }
@@ -2008,6 +2043,9 @@ async function selectLinkInstance(inst: DatabaseInstance) {
   selInstance.value = inst
   linkForm.value.database_id = 0
   linkMode.value = 'existing'
+  resetEnvRows()
+  instDatabases.value = []
+  if (linksWholeInstance(inst.engine)) return
   try {
     instDatabases.value = (await databaseApi.listDatabases(wid.value, inst.id)).data.data ?? []
   } catch (e) { notify.apiError(e); instDatabases.value = [] }
@@ -2016,16 +2054,19 @@ async function selectLinkInstance(inst: DatabaseInstance) {
 async function confirmLink() {
   if (!wid.value || !selInstance.value) return
   const prefix = linkForm.value.env_prefix.trim()
+  const envMap = linkEnvMap.value
   linkBusy.value = true
   try {
-    if (linkMode.value === 'new') {
+    if (wholeInstance.value) {
+      await appApi.linkDatabaseInstance(wid.value, appId.value, selInstance.value.id, prefix, envMap)
+    } else if (linkMode.value === 'new') {
       if (!linkForm.value.new_name.trim()) { notify.error(t('notify.appDetail.enterADatabaseName')); return }
       // Create unattached, then attach so the prefix is honored uniformly.
       const created = (await databaseApi.createDatabase(wid.value, selInstance.value.id, linkForm.value.new_name.trim(), null)).data.data
-      await appApi.attachDatabase(wid.value, appId.value, created.database.id, prefix)
+      await appApi.attachDatabase(wid.value, appId.value, created.database.id, prefix, envMap)
     } else {
       if (!linkForm.value.database_id) { notify.error(t('notify.appDetail.selectADatabase')); return }
-      await appApi.attachDatabase(wid.value, appId.value, linkForm.value.database_id, prefix)
+      await appApi.attachDatabase(wid.value, appId.value, linkForm.value.database_id, prefix, envMap)
     }
     notify.success(t('notify.appDetail.dbAttached') + changeNote())
     linkModal.value = false
@@ -2037,7 +2078,8 @@ async function confirmLink() {
 async function detachDatabase(d: AppDatabase) {
   if (!wid.value) return
   try {
-    await appApi.detachDatabase(wid.value, appId.value, d.id)
+    if (d.kind === 'instance') await appApi.unlinkDatabaseInstance(wid.value, appId.value, d.id)
+    else await appApi.detachDatabase(wid.value, appId.value, d.id)
     notify.success(t('notify.appDetail.dbDetached') + changeNote())
     appDatabases.value = (await appApi.databases(wid.value, appId.value)).data.data ?? []
     loadApp()
@@ -3017,14 +3059,14 @@ async function detachDatabase(d: AppDatabase) {
         <table>
           <thead><tr><th>{{ $t('appDetail.database') }}</th><th>{{ $t('appDetail.engine') }}</th><th>{{ $t('appDetail.user') }}</th><th>{{ $t('appDetail.tab.env') }}</th><th></th></tr></thead>
           <tbody>
-            <tr v-for="d in appDatabases" :key="d.id">
+            <tr v-for="d in appDatabases" :key="`${d.kind}-${d.id}`">
               <td>
                 <span class="cell-title" style="font-family: monospace">{{ d.name }}</span>
                 <div class="cell-sub">{{ d.instance_name }} · {{ d.host }}:{{ d.port }}</div>
               </td>
               <td class="cell-sub">{{ d.engine }}</td>
               <td class="cell-sub" style="font-family: monospace">{{ d.username }}</td>
-              <td class="cell-sub" style="font-family: monospace">{{ d.env_prefix ? d.env_prefix + '_*' : 'DB_*' }}</td>
+              <td class="cell-sub" style="font-family: monospace; white-space: normal">{{ d.env_vars?.length ? d.env_vars.join(', ') : '—' }}</td>
               <td class="text-right table-actions">
                 <button class="btn btn-secondary btn-sm" @click="revealDatabase(d)"><span class="mdi mdi-key-outline"></span>{{ $t('appDetail.connection') }}</button>
                 <button v-if="ws.canEdit" class="btn-icon btn-icon-danger" :title="$t('appDetail.detach')" :aria-label="$t('appDetail.detach')" @click="detachDatabase(d)"><span class="mdi mdi-link-variant-off"></span></button>
@@ -3777,33 +3819,58 @@ async function detachDatabase(d: AppDatabase) {
 
           <!-- Step 2: database on the instance -->
           <template v-if="selInstance">
-            <div class="seg" style="margin-top: 16px">
-              <button type="button" class="seg-btn" :class="{ active: linkMode === 'existing' }" @click="linkMode = 'existing'">{{ $t('appDetail.existingDatabase') }}</button>
-              <button type="button" class="seg-btn" :class="{ active: linkMode === 'new' }" @click="linkMode = 'new'">{{ $t('appDetail.newDatabase') }}</button>
-            </div>
+            <p v-if="wholeInstance" class="form-hint" style="margin-top: 16px">{{ $t('appDetail.db.wholeInstanceHint', { engine: selInstance.engine }) }}</p>
+            <template v-else>
+              <div class="seg" style="margin-top: 16px">
+                <button type="button" class="seg-btn" :class="{ active: linkMode === 'existing' }" @click="linkMode = 'existing'">{{ $t('appDetail.existingDatabase') }}</button>
+                <button v-if="selInstance.engine !== 'libsql'" type="button" class="seg-btn" :class="{ active: linkMode === 'new' }" @click="linkMode = 'new'">{{ $t('appDetail.newDatabase') }}</button>
+              </div>
 
-            <div v-if="linkMode === 'existing'" style="margin-top: 12px">
-              <div v-if="freeDatabases.length === 0" class="form-hint">{{ $t('appDetail.db.noUnattached') }}</div>
-              <select v-else v-model.number="linkForm.database_id" class="form-select" :aria-label="$t('appDetail.databaseToLink')" style="width: 100%">
-                <option :value="0" disabled>{{ $t('appDetail.selectDatabase') }}</option>
-                <option v-for="d in freeDatabases" :key="d.id" :value="d.id">{{ d.name }}</option>
-              </select>
-            </div>
+              <div v-if="linkMode === 'existing'" style="margin-top: 12px">
+                <div v-if="freeDatabases.length === 0" class="form-hint">{{ $t('appDetail.db.noUnattached') }}</div>
+                <select v-else v-model.number="linkForm.database_id" class="form-select" :aria-label="$t('appDetail.databaseToLink')" style="width: 100%">
+                  <option :value="0" disabled>{{ $t('appDetail.selectDatabase') }}</option>
+                  <option v-for="d in freeDatabases" :key="d.id" :value="d.id">{{ d.name }}</option>
+                </select>
+              </div>
 
-            <div v-else style="margin-top: 12px">
-              <label class="form-label">{{ $t('appDetail.newDatabaseName') }}</label>
-              <input v-model="linkForm.new_name" class="form-input" placeholder="myapp" style="width: 100%" />
-            </div>
+              <div v-else style="margin-top: 12px">
+                <label class="form-label">{{ $t('appDetail.newDatabaseName') }}</label>
+                <input v-model="linkForm.new_name" class="form-input" placeholder="myapp" style="width: 100%" />
+              </div>
+            </template>
 
             <label class="form-label" style="margin-top: 14px">{{ $t('appDetail.envVarPrefix') }}<span class="text-muted">{{ $t('appDetail.optional') }}</span></label>
             <input v-model="linkForm.env_prefix" class="form-input" :placeholder="$t('appDetail.db.prefixPlaceholder')" style="width: 100%" />
-            <p v-if="!linkForm.env_prefix.trim() && hasUnprefixed" class="form-hint" style="color: var(--warning, #d97706); margin-top: 6px">
-              <span class="mdi mdi-alert-outline"></span>{{ $t('appDetail.db.prefixWarning') }}</p>
+
+            <button type="button" class="btn btn-ghost btn-sm" style="margin-top: 10px; padding-left: 0" @click="envOpen = !envOpen">
+              <span class="mdi" :class="envOpen ? 'mdi-chevron-down' : 'mdi-chevron-right'"></span>{{ $t('appDetail.db.envVars') }}
+            </button>
+            <div v-if="envOpen" class="table-wrapper" style="margin-top: 6px">
+              <table>
+                <tbody>
+                  <tr v-for="f in linkFields" :key="f">
+                    <td style="width: 1%">
+                      <input v-model="envRows[f].on" type="checkbox" :aria-label="$t('appDetail.db.injectField', { field: f })" />
+                    </td>
+                    <td class="cell-sub" style="white-space: nowrap">
+                      {{ f }}<span v-if="f === 'database_url'" class="text-muted"> · {{ $t('appDetail.db.deprecated') }}</span>
+                    </td>
+                    <td>
+                      <input v-model="envRows[f].name" class="form-input" :disabled="!envRows[f].on" :placeholder="envDefault(f)" style="width: 100%; font-family: monospace" />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-else class="form-hint" style="margin-top: 4px; font-family: monospace">{{ linkFields.map(envResolved).filter(Boolean).join(', ') }}</p>
+            <p v-if="envClashes.length" class="form-hint" style="color: var(--warning, #d97706); margin-top: 6px">
+              <span class="mdi mdi-alert-outline"></span>{{ $t('appDetail.db.envClash', { vars: envClashes.join(', ') }) }}</p>
           </template>
         </div>
         <div class="modal-footer">
           <button class="btn btn-ghost" @click="linkModal = false">{{ $t('action.cancel') }}</button>
-          <button class="btn btn-primary" :disabled="!selInstance || linkBusy" @click="confirmLink">
+          <button class="btn btn-primary" :disabled="!selInstance || linkBusy || envClashes.length > 0" @click="confirmLink">
             {{ linkBusy ? 'Linking…' : 'Attach' }}
           </button>
         </div>
