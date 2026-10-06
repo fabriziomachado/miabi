@@ -1591,7 +1591,8 @@
     "verifyRecoveryPoint": "Verify recovery point",
     "whatWasThisBackupFor": "What was this backup for?",
     "workspaceNetworksThisDatabaseIs": "Workspace networks this database is reachable on.",
-    "workspaceSettingsBackups": "Workspace settings → Backups"
+    "workspaceSettingsBackups": "Workspace settings → Backups",
+    "updated": "Updated"
   },
   "dedicated": {
     "anOrganization": "one organization",
