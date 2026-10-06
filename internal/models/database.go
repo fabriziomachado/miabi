@@ -210,9 +210,15 @@ type Database struct {
 	// database (ON DELETE SET NULL) instead of dangling. Not serialized.
 	Application *Application `json:"-" gorm:"foreignKey:ApplicationID;constraint:OnDelete:SET NULL"`
 	// EnvPrefix namespaces the connection env vars injected into the owning app
-	// (e.g. "ANALYTICS" -> ANALYTICS_DATABASE_URL); empty = unprefixed
-	// (DATABASE_URL, DB_*). Lets one app hold several databases without clobbering.
+	// (e.g. "ANALYTICS" -> ANALYTICS_DB_URL); empty = unprefixed (DB_*).
+	// Lets one app hold several databases without clobbering.
 	EnvPrefix string `json:"env_prefix,omitempty"`
+	// EnvMap renames injected vars per connection field (url, host, port, name,
+	// user, password, database_url); an empty name skips the field.
+	EnvMap map[string]string `json:"env_map,omitempty" gorm:"serializer:json"`
+	// EnvVars records the var names injected into the owning app, so a detach
+	// removes exactly those. Empty on links made before it was recorded.
+	EnvVars []string `json:"env_vars,omitempty" gorm:"serializer:json"`
 	// SizeBytes is the database's on-disk size, refreshed by a sync.
 	SizeBytes    int64      `json:"size_bytes"`
 	SizeSyncedAt *time.Time `json:"size_synced_at"`
@@ -220,4 +226,21 @@ type Database struct {
 	Metadata  Metadata  `json:"metadata,omitempty" gorm:"serializer:json"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// DatabaseInstanceLink attaches an instance with no per-app logical databases
+// (Redis) to an application. Unlike a logical Database, an instance can be
+// linked by many apps, each with its own env prefix and mapping.
+type DatabaseInstanceLink struct {
+	ID            uint `json:"id" gorm:"primaryKey"`
+	WorkspaceID   uint `json:"workspace_id" gorm:"index;not null"`
+	InstanceID    uint `json:"instance_id" gorm:"uniqueIndex:idx_dblink_inst_app;not null"`
+	ApplicationID uint `json:"application_id" gorm:"uniqueIndex:idx_dblink_inst_app;index;not null"`
+	// Application declares the FK so deleting the app drops its links.
+	Application *Application      `json:"-" gorm:"foreignKey:ApplicationID;constraint:OnDelete:CASCADE"`
+	EnvPrefix   string            `json:"env_prefix,omitempty"`
+	EnvMap      map[string]string `json:"env_map,omitempty" gorm:"serializer:json"`
+	EnvVars     []string          `json:"env_vars,omitempty" gorm:"serializer:json"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
 }

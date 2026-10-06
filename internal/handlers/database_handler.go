@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/miabi-io/miabi/internal/services/storageclass"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -440,7 +441,7 @@ func (h *DatabaseHandler) Delete(c *okapi.Context) error {
 		return c.AbortNotFound("database not found")
 	}
 	if err := h.svc.Delete(c.Request().Context(), inst); err != nil {
-		if errors.Is(err, database.ErrInstanceInUse) || errors.Is(err, database.ErrInstanceRunning) || errors.Is(err, database.ErrInstanceOwned) {
+		if errors.Is(err, database.ErrInstanceInUse) || errors.Is(err, database.ErrInstanceLinked) || errors.Is(err, database.ErrInstanceRunning) || errors.Is(err, database.ErrInstanceOwned) {
 			return c.AbortWithError(409, err)
 		}
 		return c.AbortInternalServerError("failed to delete database", err)
@@ -478,11 +479,17 @@ func (h *DatabaseHandler) CreateDatabase(c *okapi.Context, req *CreateLogicalDat
 		return c.AbortNotFound("database not found")
 	}
 	wsID := inst.WorkspaceID
+	var app *models.Application
+	var env database.EnvLink
 	if req.Body.ApplicationID != nil {
-		if app, aerr := h.apps.Get(wsID, *req.Body.ApplicationID); aerr == nil {
-			if err := h.reach(app, inst); err != nil {
-				return c.AbortBadRequest(err.Error())
-			}
+		if app, err = h.apps.Get(wsID, *req.Body.ApplicationID); err != nil {
+			return c.AbortNotFound("application not found")
+		}
+		if err := h.reach(app, inst); err != nil {
+			return c.AbortBadRequest(err.Error())
+		}
+		if env, err = h.svc.ResolveEnvLink(wsID, app.ID, inst.Engine, "", nil, 0, 0); err != nil {
+			return h.mapDBErr(c, err)
 		}
 	}
 	db, err := h.svc.CreateDatabase(c.Request().Context(), wsID, inst.ID, req.Body.Name, req.Body.ApplicationID)
@@ -492,9 +499,9 @@ func (h *DatabaseHandler) CreateDatabase(c *okapi.Context, req *CreateLogicalDat
 	h.record(c, wsID, "database.db_create", inst.ID)
 
 	injected := false
-	if req.Body.ApplicationID != nil {
-		if conn, err := h.svc.DatabaseConnection(inst, db); err == nil {
-			injected = h.injectIntoApp(wsID, *req.Body.ApplicationID, inst, db, conn, "")
+	if app != nil {
+		if _, err := h.svc.AttachToApp(wsID, db.ID, app.ID, env); err == nil {
+			injected = h.injectIntoApp(app, inst, db, env, nil)
 		}
 	}
 	return created(c, map[string]any{"database": db, "env_injected": injected})
@@ -567,12 +574,16 @@ func (h *DatabaseHandler) AppDatabaseConnection(c *okapi.Context) error {
 	return ok(c, info)
 }
 
-// AttachDatabaseRequest links an existing logical database to an app.
+// AttachDatabaseRequest links an existing logical database (or, for Redis, an
+// instance) to an app.
 type AttachDatabaseRequest struct {
 	Body struct {
 		// EnvPrefix optionally namespaces the injected connection vars
-		// (e.g. "ANALYTICS" -> ANALYTICS_DATABASE_URL); empty = DATABASE_URL/DB_*.
+		// (e.g. "ANALYTICS" -> ANALYTICS_DB_URL); empty = DB_*.
 		EnvPrefix string `json:"env_prefix"`
+		// EnvMap renames the var of a connection field (url, database_url, host,
+		// port, name, user, password); an empty name skips the field.
+		EnvMap map[string]string `json:"env_map"`
 	} `json:"body"`
 }
 
@@ -604,15 +615,20 @@ func (h *DatabaseHandler) AttachToApp(c *okapi.Context, req *AttachDatabaseReque
 		return c.AbortWithError(409, errors.New("this database is already attached to another application"))
 	}
 	prefix := sanitizeEnvPrefix(req.Body.EnvPrefix)
-	if _, err := h.svc.AttachToApp(wsID, db.ID, uint(appID), prefix); err != nil {
+	env, err := h.svc.ResolveEnvLink(wsID, uint(appID), inst.Engine, prefix, req.Body.EnvMap, db.ID, 0)
+	if err != nil {
 		return h.mapDBErr(c, err)
 	}
-	injected := false
-	if conn, err := h.svc.DatabaseConnection(inst, db); err == nil {
-		injected = h.injectIntoApp(wsID, uint(appID), inst, db, conn, prefix)
+	var previous []string
+	if db.ApplicationID != nil {
+		previous = database.InjectedKeys(inst.Engine, db.EnvPrefix, db.EnvMap, db.EnvVars)
 	}
+	if _, err := h.svc.AttachToApp(wsID, db.ID, uint(appID), env); err != nil {
+		return h.mapDBErr(c, err)
+	}
+	injected := h.injectIntoApp(app, inst, db, env, previous)
 	h.record(c, wsID, "database.attach_app", db.ID)
-	return ok(c, map[string]any{"database": db, "env_injected": injected})
+	return ok(c, map[string]any{"database": db, "env_injected": injected, "env_vars": env.Vars})
 }
 
 // DetachFromApp unlinks a logical database from the app and removes the env
@@ -630,69 +646,117 @@ func (h *DatabaseHandler) DetachFromApp(c *okapi.Context) error {
 	if db.ApplicationID == nil || *db.ApplicationID != uint(appID) {
 		return c.AbortNotFound("database is not attached to this application")
 	}
-	prefix := db.EnvPrefix // capture before the service clears it
+	inst, err := h.svc.Get(wsID, db.InstanceID)
+	if err != nil {
+		return c.AbortNotFound("database instance not found")
+	}
+	keys := database.InjectedKeys(inst.Engine, db.EnvPrefix, db.EnvMap, db.EnvVars)
 	if _, err := h.svc.DetachFromApp(wsID, db.ID); err != nil {
 		return h.mapDBErr(c, err)
 	}
-	h.removeFromApp(wsID, uint(appID), prefix)
+	h.removeFromApp(wsID, uint(appID), keys)
 	h.record(c, wsID, "database.detach_app", db.ID)
 	return message(c, "database detached")
 }
 
-// injectIntoApp writes the connection as env vars on the app and flags it for redeploy. The
-// password and URL are injected as `${{ secrets.NAME }}` references to the database's
-// auto-provisioned Vault secrets, so the app env never holds plaintext. Falls back to plaintext.
-func (h *DatabaseHandler) injectIntoApp(workspaceID, appID uint, inst *models.DatabaseInstance, db *models.Database, conn database.ConnectionInfo, prefix string) bool {
-	app, err := h.apps.Get(workspaceID, appID)
+// LinkInstanceToApp links a whole instance (Redis) to the app and injects its
+// connection. Unlike a logical database, one instance can serve many apps.
+func (h *DatabaseHandler) LinkInstanceToApp(c *okapi.Context, req *AttachDatabaseRequest) error {
+	wsID := middlewares.WorkspaceID(c)
+	appID, err := appParamInt(c)
+	if err != nil || appID <= 0 {
+		return c.AbortBadRequest("invalid app id")
+	}
+	app, err := h.apps.Get(wsID, uint(appID))
+	if err != nil {
+		return c.AbortNotFound("application not found")
+	}
+	inst, err := h.load(c)
+	if err != nil {
+		return c.AbortNotFound("database not found")
+	}
+	if models.EngineUsesLogicalDatabaseRecord(inst.Engine) {
+		return c.AbortBadRequest(database.ErrLinkLogicalDatabase.Error())
+	}
+	if err := h.reach(app, inst); err != nil {
+		return c.AbortBadRequest(err.Error())
+	}
+	prefix := sanitizeEnvPrefix(req.Body.EnvPrefix)
+	env, err := h.svc.ResolveEnvLink(wsID, uint(appID), inst.Engine, prefix, req.Body.EnvMap, 0, inst.ID)
+	if err != nil {
+		return h.mapDBErr(c, err)
+	}
+	var previous []string
+	if l, err := h.svc.InstanceLinkForApp(wsID, inst.ID, uint(appID)); err == nil {
+		previous = database.InjectedKeys(inst.Engine, l.EnvPrefix, l.EnvMap, l.EnvVars)
+	}
+	link, err := h.svc.LinkInstance(wsID, inst.ID, uint(appID), env)
+	if err != nil {
+		return h.mapDBErr(c, err)
+	}
+	injected := h.injectIntoApp(app, inst, nil, env, previous)
+	h.record(c, wsID, "database.link_app", inst.ID)
+	return ok(c, map[string]any{"link": link, "env_injected": injected, "env_vars": env.Vars})
+}
+
+// UnlinkInstanceFromApp removes the app's link to an instance and the env vars
+// it injected.
+func (h *DatabaseHandler) UnlinkInstanceFromApp(c *okapi.Context) error {
+	wsID := middlewares.WorkspaceID(c)
+	appID, err := appParamInt(c)
+	if err != nil || appID <= 0 {
+		return c.AbortBadRequest("invalid app id")
+	}
+	inst, err := h.load(c)
+	if err != nil {
+		return c.AbortNotFound("database not found")
+	}
+	l, err := h.svc.UnlinkInstance(wsID, inst.ID, uint(appID))
+	if err != nil {
+		return c.AbortNotFound("database is not linked to this application")
+	}
+	h.removeFromApp(wsID, uint(appID), database.InjectedKeys(inst.Engine, l.EnvPrefix, l.EnvMap, l.EnvVars))
+	h.record(c, wsID, "database.unlink_app", inst.ID)
+	return message(c, "database unlinked")
+}
+
+// AppInstanceConnection reveals the connection of an instance linked to the app.
+func (h *DatabaseHandler) AppInstanceConnection(c *okapi.Context) error {
+	wsID := middlewares.WorkspaceID(c)
+	appID, err := appParamInt(c)
+	if err != nil || appID <= 0 {
+		return c.AbortBadRequest("invalid app id")
+	}
+	inst, err := h.load(c)
+	if err != nil {
+		return c.AbortNotFound("database not found")
+	}
+	info, err := h.svc.InstanceConnectionForApp(wsID, uint(appID), inst.ID)
+	if err != nil {
+		return c.AbortNotFound("database not found")
+	}
+	h.record(c, wsID, "database.app_reveal", uint(appID))
+	return ok(c, info)
+}
+
+// injectIntoApp writes a link's connection onto the app, drops vars a previous
+// link of the same database injected but this one no longer does, and flags
+// the app for redeploy. d is nil for an instance link.
+func (h *DatabaseHandler) injectIntoApp(app *models.Application, inst *models.DatabaseInstance, d *models.Database, env database.EnvLink, previous []string) bool {
+	vars, err := h.svc.AppEnv(inst, d, env.Prefix, env.Map)
 	if err != nil {
 		return false
 	}
-
-	passVal := conn.Password
-	uriVal := conn.URI
-	passSecret := true
-	uriSecret := true
-	if h.secrets != nil {
-		passVal = "${{ secrets." + database.PasswordSecretName(inst, db) + " }}"
-		passSecret = false // the reference itself is not sensitive
-		if conn.URI != "" {
-			uriVal = "${{ secrets." + database.URLSecretName(inst, db) + " }}"
-			uriSecret = false
+	for _, k := range previous {
+		if !slices.Contains(env.Vars, k) {
+			_ = h.apps.DeleteEnvVar(app.ID, k)
 		}
-	}
-
-	vars := []struct {
-		k, v   string
-		secret bool
-	}{
-		{"DATABASE_URL", uriVal, uriSecret},
-		{"DB_HOST", conn.Host, false},
-		{"DB_PORT", strconv.Itoa(conn.Port), false},
-		{"DB_NAME", conn.Database, false},
-		{"DB_USER", conn.Username, false},
-		{"DB_PASSWORD", passVal, passSecret},
 	}
 	for _, e := range vars {
-		if e.v == "" {
-			continue
-		}
-		_ = h.apps.SetEnvVar(app.ID, envKey(prefix, e.k), e.v, e.secret)
+		_ = h.apps.SetEnvVar(app.ID, e.Key, e.Value, e.Secret)
 	}
 	_, _ = h.apps.MarkRedeployRequired(app)
 	return true
-}
-
-// dbEnvBaseKeys are the connection env vars injected per attached database
-// (before any prefix).
-var dbEnvBaseKeys = []string{"DATABASE_URL", "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"}
-
-// envKey applies an optional prefix to a base key ("ANALYTICS" + "DB_HOST" ->
-// "ANALYTICS_DB_HOST"); an empty prefix leaves the base key unchanged.
-func envKey(prefix, base string) string {
-	if prefix == "" {
-		return base
-	}
-	return prefix + "_" + base
 }
 
 // sanitizeEnvPrefix normalizes a user-supplied prefix to an upper-snake token
@@ -710,15 +774,15 @@ func sanitizeEnvPrefix(s string) string {
 	return strings.Trim(b.String(), "_")
 }
 
-// removeFromApp deletes the connection env vars previously injected for a
-// database (using its recorded prefix) and flags the app for redeploy.
-func (h *DatabaseHandler) removeFromApp(workspaceID, appID uint, prefix string) {
+// removeFromApp deletes the env vars a link injected and flags the app for
+// redeploy.
+func (h *DatabaseHandler) removeFromApp(workspaceID, appID uint, keys []string) {
 	app, err := h.apps.Get(workspaceID, appID)
 	if err != nil {
 		return
 	}
-	for _, base := range dbEnvBaseKeys {
-		_ = h.apps.DeleteEnvVar(app.ID, envKey(prefix, base))
+	for _, k := range keys {
+		_ = h.apps.DeleteEnvVar(app.ID, k)
 	}
 	_, _ = h.apps.MarkRedeployRequired(app)
 }
@@ -767,6 +831,10 @@ func (h *DatabaseHandler) mapNetworkErr(c *okapi.Context, err error) error {
 		return c.AbortWithError(409, err)
 	case errors.Is(err, database.ErrNotFound):
 		return c.AbortNotFound("not found")
+	case errors.Is(err, database.ErrInvalidEnvMap), errors.Is(err, database.ErrLinkLogicalDatabase):
+		return c.AbortBadRequest(err.Error())
+	case errors.Is(err, database.ErrEnvConflict), errors.Is(err, database.ErrInstanceLinked):
+		return c.AbortWithError(409, err)
 	default:
 		return c.AbortInternalServerError("network operation failed", err)
 	}
@@ -802,6 +870,10 @@ func (h *DatabaseHandler) mapDBErr(c *okapi.Context, err error) error {
 		return c.AbortWithError(409, err)
 	case errors.Is(err, database.ErrNotFound):
 		return c.AbortNotFound("not found")
+	case errors.Is(err, database.ErrInvalidEnvMap), errors.Is(err, database.ErrLinkLogicalDatabase):
+		return c.AbortBadRequest(err.Error())
+	case errors.Is(err, database.ErrEnvConflict), errors.Is(err, database.ErrInstanceLinked):
+		return c.AbortWithError(409, err)
 	default:
 		return c.AbortInternalServerError("database operation failed", err)
 	}

@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/miabi-io/miabi/internal/services/placement"
-	"strconv"
 	"strings"
 	"time"
 
@@ -649,9 +648,10 @@ func (r *restoreRun) waitForDatabase(ctx context.Context, instanceID uint, name 
 	}
 }
 
-// applyDatabaseLinks re-attaches each logical database to the app that owns it and re-injects the connection.
-// The injection is the point: the app's environment came from a platform whose alias, port and generated user
-// are not this one's. Re-injecting rewrites exactly those keys; a hand-typed connection string is left alone.
+// applyDatabaseLinks re-attaches each logical database to the app that owns it, re-links instances (Redis)
+// and re-injects the connection. The injection is the point: the app's environment came from a platform whose
+// alias, port and generated user are not this one's. Re-injecting rewrites exactly those keys; a hand-typed
+// connection string is left alone.
 func (r *restoreRun) applyDatabaseLinks() {
 	for _, d := range r.state.Databases {
 		instID := r.instanceIDs[d.Name]
@@ -679,44 +679,50 @@ func (r *restoreRun) applyDatabaseLinks() {
 			if appID == 0 {
 				continue
 			}
-			if _, err := r.svc.Database.AttachToApp(r.target, db.ID, appID, ld.EnvPrefix); err != nil {
+			env := r.envLink(inst, d.Name+"/"+ld.Name, ld.EnvPrefix, ld.EnvMap)
+			if _, err := r.svc.Database.AttachToApp(r.target, db.ID, appID, env); err != nil {
 				r.add("database", d.Name+"/"+ld.Name, "failed", "could not attach to "+ld.App+": "+err.Error())
 				continue
 			}
-			r.injectConnection(inst, db, appID, ld.EnvPrefix)
+			r.injectConnection(inst, db, appID, env)
+		}
+		for _, l := range d.Links {
+			appID := r.appIDs[l.App]
+			if appID == 0 {
+				continue
+			}
+			env := r.envLink(inst, d.Name, l.EnvPrefix, l.EnvMap)
+			if _, err := r.svc.Database.LinkInstance(r.target, instID, appID, env); err != nil {
+				r.add("database", d.Name, "failed", "could not link to "+l.App+": "+err.Error())
+				continue
+			}
+			r.injectConnection(inst, nil, appID, env)
 		}
 	}
 }
 
+// envLink rebuilds a link's env from the bundle. A mapping this platform rejects falls back to the
+// defaults, so the link still lands.
+func (r *restoreRun) envLink(inst *models.DatabaseInstance, what, prefix string, m map[string]string) database.EnvLink {
+	norm, err := database.NormalizeEnvMap(inst.Engine, prefix, m)
+	if err != nil {
+		r.report.Note(what + ": env mapping ignored, defaults used: " + err.Error())
+		norm = nil
+	}
+	return database.EnvLink{Prefix: prefix, Map: norm, Vars: database.EnvKeys(inst.Engine, prefix, norm)}
+}
+
 // injectConnection writes the target's own connection details onto the app,
-// mirroring what attaching a database through the UI does.
-func (r *restoreRun) injectConnection(inst *models.DatabaseInstance, db *models.Database, appID uint, prefix string) {
-	conn, err := r.svc.Database.DatabaseConnection(inst, db)
+// mirroring what attaching a database through the UI does. db is nil for an
+// instance link.
+func (r *restoreRun) injectConnection(inst *models.DatabaseInstance, db *models.Database, appID uint, env database.EnvLink) {
+	vars, err := r.svc.Database.AppEnv(inst, db, env.Prefix, env.Map)
 	if err != nil {
 		return
 	}
-	// Password and URL go in as Vault references, so the app's environment never
-	// holds the plaintext and a rotation propagates to every consumer.
-	passVal := "${{ secrets." + database.PasswordSecretName(inst, db) + " }}"
-	uriVal := "${{ secrets." + database.URLSecretName(inst, db) + " }}"
-	vars := []struct{ k, v string }{
-		{"DATABASE_URL", uriVal},
-		{"DB_HOST", conn.Host},
-		{"DB_PORT", strconv.Itoa(conn.Port)},
-		{"DB_NAME", conn.Database},
-		{"DB_USER", conn.Username},
-		{"DB_PASSWORD", passVal},
-	}
 	for _, v := range vars {
-		if v.v == "" {
-			continue
-		}
-		key := v.k
-		if prefix != "" {
-			key = prefix + "_" + v.k
-		}
-		if err := r.svc.App.SetEnvVar(appID, key, v.v, false); err != nil {
-			logger.Warn("bundle: could not inject database env", "app", appID, "key", key, "error", err)
+		if err := r.svc.App.SetEnvVar(appID, v.Key, v.Value, v.Secret); err != nil {
+			logger.Warn("bundle: could not inject database env", "app", appID, "key", v.Key, "error", err)
 		}
 	}
 }

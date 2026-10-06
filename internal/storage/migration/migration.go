@@ -103,6 +103,7 @@ func Run(db *gorm.DB) error {
 		&models.DatabaseSize{},
 		&models.DatabaseInstance{},
 		&models.Database{},
+		&models.DatabaseInstanceLink{},
 		&models.Volume{},
 		&models.StorageClass{},
 		&models.Config{},

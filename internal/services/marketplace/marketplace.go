@@ -473,7 +473,7 @@ func (s *Service) install(ctx context.Context, workspaceID uint, in InstallInput
 	// post-install. Best-effort; the install already succeeded.
 	for depName, db := range dbModels {
 		if app := consumerApp(m, created, depName); app != nil {
-			_, _ = s.dbs.AttachToApp(workspaceID, db.ID, app.ID, "")
+			_, _ = s.dbs.AttachToApp(workspaceID, db.ID, app.ID, database.EnvLink{})
 		}
 	}
 

@@ -354,8 +354,12 @@
       "emptyHint": "Aucune base de données attachée. Liez une base existante ou créez-en une nouvelle sur une instance.",
       "noInstances": "Aucune instance de base de données sur le nœud de cette application.",
       "noUnattached": "Aucune base de données non attachée sur cette instance. Passez à « ＋ Nouvelle base de données ».",
-      "prefixPlaceholder": "ex. ANALYTICS → ANALYTICS_DATABASE_URL",
-      "prefixWarning": "Cette application a déjà une base de données sans préfixe. Ajoutez un préfixe pour éviter d’écraser ses variables DATABASE_URL / DB_*."
+      "prefixPlaceholder": "ex. ANALYTICS → ANALYTICS_DB_URL",
+      "envVars": "Variables d’environnement",
+      "injectField": "Injecter {field}",
+      "deprecated": "obsolète, utilisez url",
+      "envClash": "Déjà injectées par une autre base de données liée : {vars}. Ajoutez un préfixe ou renommez-les.",
+      "wholeInstanceHint": "{engine} n’a pas de bases par application : l’application se connecte à l’instance, que d’autres applications peuvent aussi lier."
     },
     "default": "par défaut",
     "defaultAlwaysAttached": "(par défaut, toujours attaché)",

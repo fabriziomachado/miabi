@@ -87,6 +87,7 @@ func (r *WorkspaceRepository) Delete(id uint) error {
 			{&models.Backup{}, "database_id IN (?)", []any{dbIDs()}},
 			{&models.BackupSchedule{}, "workspace_id = ?", []any{id}},
 			{&models.Database{}, "instance_id IN (?)", []any{instIDs()}},
+			{&models.DatabaseInstanceLink{}, "workspace_id = ?", []any{id}},
 			{&models.VolumeBackup{}, "volume_id IN (?)", []any{volIDs()}},
 			{&models.VolumeBackupSchedule{}, "workspace_id = ?", []any{id}},
 			{&models.DNSRecord{}, "domain_id IN (?)", []any{domIDs()}},
