@@ -1591,7 +1591,8 @@
     "verifyRecoveryPoint": "Vérifier le point de restauration",
     "whatWasThisBackupFor": "À quoi servait cette sauvegarde ?",
     "workspaceNetworksThisDatabaseIs": "Réseaux de l’espace de travail sur lesquels cette base est joignable.",
-    "workspaceSettingsBackups": "Paramètres de l’espace de travail → Sauvegardes"
+    "workspaceSettingsBackups": "Paramètres de l’espace de travail → Sauvegardes",
+    "updated": "Mis à jour le"
   },
   "dedicated": {
     "anOrganization": "une organisation",

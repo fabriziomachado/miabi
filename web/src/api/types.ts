@@ -1844,6 +1844,8 @@ export interface DatabaseInstance {
   metadata?: Record<string, string>
   annotations?: Record<string, string>
   upgrade?: UpgradeProgress
+  created_at?: string
+  updated_at?: string
 }
 
 export interface UpgradeProgress {

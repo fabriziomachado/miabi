@@ -20,6 +20,7 @@ import { copyText } from '@/utils/clipboard'
 import type { DatabaseInstance, DBStatus, UpgradeProgress, LogicalDatabase, ConnectionInfo, ForwardSession, Backup, BackupSchedule, DatabaseBackupSet, DatabaseBackupSetSchedule, DiscoveredSet, Application, Network, UpgradeOptions, UpgradePlan, StatsSample, AppEvent, DatabaseSize, DatabaseSizeOffer } from '@/api/types'
 import AppModal from '@/components/AppModal.vue'
 import { relativeTime } from '@/utils/time'
+import { fmtDateTime } from '@/utils/datetime'
 
 const route = useRoute()
 const { t } = useI18n()
@@ -1030,6 +1031,8 @@ onUnmounted(() => { stopStatusStream(); stopMetricsPoll(); if (backstop) clearIn
           <div v-if="inst.storage_class"><span class="detail-label">{{ $t('volumes.storageClass') }}</span>{{ inst.storage_class }}</div>
           <div v-if="inst.size_synced_at"><span class="detail-label">{{ $t('db.onDiskSize') }}</span>{{ fmtBytes(inst.size_bytes) }}</div>
           <div><span class="detail-label">{{ $t('db.limits') }}</span>{{ fmtLimits(inst) }}</div>
+          <div><span class="detail-label">{{ $t('dashboard.col.created') }}</span>{{ fmtDateTime(inst.created_at) }}</div>
+          <div><span class="detail-label">{{ $t('db.updated') }}</span>{{ fmtDateTime(inst.updated_at) }}</div>
         </div>
       </div>
 
